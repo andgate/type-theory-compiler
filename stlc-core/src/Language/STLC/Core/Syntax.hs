@@ -1,5 +1,8 @@
 {-# LANGUAGE LambdaCase #-}
-module Language.ANF.Syntax where
+module Language.STLC.Core.Syntax where
+
+import Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NE
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -25,23 +28,30 @@ data DataType =
   DataType String [(String, [(Maybe String, Type)])]
 
 data Exp
-  = ECall String [Val]
+  = ECall Exp [Exp]
   | EVal Val
-  | ELet (Maybe String) Type Exp Type Exp
-  | EIf Val Exp Else
-  | EMatchI Val Type [(Int, Exp)]
-  | EMatch Val Type [(String, [Maybe String], Exp)]
+  | ELet [(Pat, Exp)] Exp
+  | EIf Exp Exp Else
+  | EMatchI Exp [(Int, Exp)]
+  | EMatch Exp (NonEmpty (String, [Maybe String], Exp))
   | EOp Op
+  | EType Exp Type
+
+data Pat
+  = PVar String
+  | PCon String [Pat]
+  | PWild
+  | PType Type
 
 data Else
   = Else Exp
-  | Elif Val Exp Else
+  | Elif Exp Exp Else
 
 data Val
   = VVar String
   | VInt Int
   | VString String
-  | VArray [Val]
+  | VArray [Exp]
 
 data Type
   = TCon String
@@ -61,32 +71,32 @@ data Op
   | ArrayOp ArrayOp
 
 data IArithOp
-  = AddOpI Val Val
-  | SubOpI Val Val
-  | MulOpI Val Val
+  = AddOpI Exp Exp
+  | SubOpI Exp Exp
+  | MulOpI Exp Exp
 
 data FArithOp
-  = AddOpF Val Val
-  | SubOpF Val Val
-  | MulOpF Val Val
+  = AddOpF Exp Exp
+  | SubOpF Exp Exp
+  | MulOpF Exp Exp
 
-data Constr = Constr String [Val]
+data Constr = Constr String [Exp]
 
 data MemOp
   = ConstrOp Constr    -- Stack allocation
   | NewOp Constr       -- Heap allocation
-  | FreeOp Val         -- Heap deallocation
-  | MemAccessI Val Val
-  | MemAccess Val String  -- Memory access, can either be an integer or some member string
-  | MemUpdate String Val  -- Memory update
+  | FreeOp Exp         -- Heap deallocation
+  | MemAccessI Exp Exp
+  | MemAccess Exp String  -- Memory access, can either be an integer or some member string
+  | MemUpdate String Exp  -- Memory update
 
 data PtrOp
-  = RefOp Type Val
-  | DerefOp Type Val
+  = RefOp Exp
+  | DerefOp Exp
 
 data ArrayOp
   = NewArrayOp Int Type
-  | FreeArrayOp Val
+  | FreeArrayOp Exp
   | ResizeArrayOp String Int Type
   | AccessArrayOp String Int
 

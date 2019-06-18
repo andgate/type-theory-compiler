@@ -4,8 +4,12 @@ module Main where
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
-import Language.ANF.Syntax
-import Language.ANF.LLVM.Codegen
+import Language.STLC.Lifted.Syntax
+import Language.STLC.Lifted.Infer
+import Language.STLC.Lifted.Match
+import Language.STLC.Lifted.Desugar
+
+import Language.STLC.Core.Codegen
 
 import qualified LLVM.Module as LLVM
 import qualified LLVM.Internal.Context as LLVM

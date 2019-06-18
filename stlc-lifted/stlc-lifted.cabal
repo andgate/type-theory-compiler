@@ -16,23 +16,16 @@ maintainer:          gabe4k@gmail.com
 extra-source-files:  CHANGELOG.md
 
 library
-  exposed-modules:     Language.STLC.Lifted.Match
-                       Language.STLC.Lifted.ANF
+  exposed-modules:     Language.STLC.Lifted.Desugar
+                       Language.STLC.Lifted.Infer
+                       Language.STLC.Lifted.Match
                        Language.STLC.Lifted.Syntax
   -- other-modules:
   -- other-extensions:
-  build-depends:       anf,
+  build-depends:       stlc-core,
                        base ^>=4.12.0.0,
+                       containers,
+                       mtl,
                        unbound-generics
   hs-source-dirs:      src/
-  default-language:    Haskell2010
-
-
-executable stlc-lifted-test
-  main-is:             Main.hs
-  --other-modules:       
-  -- other-extensions:
-  build-depends:       base ^>=4.12.0.0,
-                       stlc-lifted
-  -- hs-source-dirs:
   default-language:    Haskell2010

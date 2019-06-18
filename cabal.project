@@ -1,4 +1,5 @@
-packages: anf/
-          anf-llvm/
+packages: stlc-core/
+          stlc-core-llvm/
           stlc-lifted/
           systemf/
+          ttc/
