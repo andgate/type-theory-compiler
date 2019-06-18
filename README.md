@@ -32,5 +32,5 @@ This will run some tests and produce an llvm ir file, `test.ll`.
 You can then compile this file with `clang -O1 test.ll -o test`, and this
 will produce a binary executable, which you can run with `./test`.
 
-There is a script which does this for you, which can be run via `./runtest.sh`.
-This test will also produces optimized llvm ir code in the file `test.ll.opt`.
+There is a script which does this for you, which can be run via `./runtest.sh`
+which will also produce optimized llvm ir code in the file `test.ll.opt`.
