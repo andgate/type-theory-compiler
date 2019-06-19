@@ -11,6 +11,7 @@ import Language.STLC.Lifted.Syntax
 import qualified Language.LLTT.Syntax as LL
 
 import Control.Monad
+import Data.Bifunctor
 import Data.Maybe
 import Data.List
 import Data.Bitraversable
@@ -25,14 +26,30 @@ import Unbound.Generics.LocallyNameless.Name (name2String, s2n)
 -- translated into LLVM IR.
 
 desugarModule :: [Defn] -> [LL.Defn]
-desugarModule modl = undefined
+desugarModule = runFreshM . mapM desugarDefn
+
+
+desugarDefn :: Fresh m => Defn -> m LL.Defn
+desugarDefn = \case
+  FuncDefn f -> LL.FuncDefn <$> desugarFunc f
+  ExternDefn ex -> LL.ExternDefn <$> desugarExtern ex
+  DataTypeDefn dt -> LL.DataTypeDefn <$> desugarDataType dt
+
+desugarExtern :: Fresh m => Extern -> m LL.Extern
+desugarExtern (Extern n paramtys retty)
+  = return $ LL.Extern n (desugarType <$> paramtys) (desugarType retty)
+
+desugarDataType :: Fresh m => DataType -> m LL.DataType
+desugarDataType (DataType n dt_cons)
+  = return $ LL.DataType n dt_cons'
+  where dt_cons' = (second (second desugarType <$>)) <$> dt_cons      
 
 desugarFunc :: Fresh m => Func -> m LL.Func
 desugarFunc (Func ty rbnd) = do
   let (fn_n, bnd) = unrebind rbnd
       fn_n' = name2String fn_n
   (ps, body) <- unbind bnd
-  ps' <- mapM desugarPat ps
+  let ps' = desugarPat <$> ps
   body' <- desugarExp body
   return $ LL.Func fn_n' ps' body'
 
@@ -56,7 +73,7 @@ desugarExp' ty = \case
     let (ps, es) = unzip [(p, e) | (p, Embed e)<- untelescope rbnd]
     case body of
       EType _ body_ty -> do
-        ps' <- mapM desugarPat ps
+        let ps' = desugarPat <$> ps
         es' <- mapM desugarExp es
         body' <- desugarExp body
         let rhs = zip ps' es'
@@ -76,24 +93,24 @@ desugarVal = \case
   EType e _ -> desugarVal e
   EInt i -> Just $ LL.VInt i
 
-desugarType :: Fresh m => Type -> m LL.Type
+desugarType :: Type -> LL.Type
 desugarType = \case
   ty@(TArr a b) ->
     let (paramtys, retty) = splitType ty
-    in LL.TFunc <$> desugarType retty <*> mapM desugarType paramtys 
+    in LL.TFunc (desugarType retty) (desugarType <$> paramtys) 
 
-  TCon n  -> pure $ LL.TCon n
-  TI8     -> pure LL.TI8
-  TI32    -> pure LL.TI32
-  TArray i ty -> LL.TArray i <$> desugarType ty
-  TPtr ty -> LL.TPtr <$> desugarType ty
-  TString -> pure LL.TString
-  TVoid   -> pure LL.TVoid
+  TCon n  -> LL.TCon n
+  TI8     -> LL.TI8
+  TI32    -> LL.TI32
+  TArray i ty -> LL.TArray i (desugarType ty)
+  TPtr ty -> LL.TPtr (desugarType ty)
+  TString -> LL.TString
+  TVoid   -> LL.TVoid
   
 
-desugarPat :: Fresh m => Pat -> m LL.Pat
+desugarPat :: Pat -> LL.Pat
 desugarPat = \case
-  PVar v     -> pure $ LL.PVar (name2String v)
-  PCon n ps  -> LL.PCon n <$> mapM desugarPat ps
-  PWild      -> pure LL.PWild
-  PType p ty -> LL.PType <$> desugarPat p <*> desugarType ty
+  PVar v     -> LL.PVar (name2String v)
+  PCon n ps  -> LL.PCon n (desugarPat <$> ps)
+  PWild      -> LL.PWild
+  PType p ty -> LL.PType (desugarPat p) (desugarType ty)

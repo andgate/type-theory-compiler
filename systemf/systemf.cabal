@@ -21,6 +21,7 @@ library
                        Language.SystemF.Monomorphize
                        Language.SystemF.Partial
                        Language.SystemF.Syntax
+                       Language.SystemF.W
                        
   -- other-modules:
   -- other-extensions:
