@@ -39,9 +39,8 @@ llvm ir code in the file `test.ll.opt`.
 
 ## Languages
 
-We have a family of languages
-
-LLTC: A type system that easily compiles to llvm ir code.
-STLC: Simply Type Lambda Calculus
-STLC-Lifted: STLC with lambda functions lifted to global.
-SystemF: STLC + type variables and polymorphism
+We have a family of languages:
+  - LLTC: A type system that easily compiles to llvm ir code.
+  - STLC: Simply Type Lambda Calculus
+  - STLC-Lifted: STLC with lambda functions lifted to global.
+  - SystemF: STLC + type variables and polymorphism
