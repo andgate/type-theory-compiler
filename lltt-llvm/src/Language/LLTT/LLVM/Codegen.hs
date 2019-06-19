@@ -3,9 +3,9 @@
              RecursiveDo,
              TupleSections
   #-}
-module Language.STLC.Core.LLVM.Codegen where
+module Language.LLTT.LLVM.Codegen where
 
-import qualified Language.STLC.Core.Syntax as Core
+import qualified Language.LLTT.Syntax as LL
 
 import Control.Monad
 import Control.Monad.Fix
@@ -121,22 +121,25 @@ envLookupMember :: String -> Env -> Maybe (Type, Int)
 envLookupMember mem_n env = Map.lookup mem_n (envMembers env)
 
 
-genModule :: Env -> [Core.Defn] -> Module
+genModule :: Env -> [LL.Defn] -> Module
 genModule env defns = buildModule "exampleModule" $
                         foldM genDefn env defns
 
-genDefn :: (MonadFix m, MonadModuleBuilder m) => Env-> Core.Defn -> m Env
+genDefn :: (MonadFix m, MonadModuleBuilder m) => Env-> LL.Defn -> m Env
 genDefn env = \case
-  Core.FuncDefn f@(Core.Func n _ _ ty) -> do
+  LL.FuncDefn f@(LL.Func n ps body@(LL.EType _ retty)) -> do 
+    let paramtys = [ty | LL.PType _ ty <- ps]
+        ty = genType env (LL.TFunc retty paramtys)
     f' <- genFunc env f
-    return $ envInsertFunc n f' $ envInsertType n (genType env ty) env
+    return $ envInsertFunc n f'
+           $ envInsertType n ty env
 
-  Core.ExternDefn ex@(Core.Extern n _ ty) -> do
+  LL.ExternDefn ex@(LL.Extern n _ ty) -> do
     ex' <- genExtern env ex
     return $ envInsertFunc n ex' $ envInsertType n (genType env ty) env
 
-  Core.DataTypeDefn dt@(Core.DataType n _) -> do
-    let s = Core.sizeDataType (envSizes env) dt
+  LL.DataTypeDefn dt@(LL.DataType n _) -> do
+    let s = LL.sizeDataType (envSizes env) dt
     (ty_n, ty, cons) <- genDataType env s dt
     return . (\env -> foldl' (\env (_, con_ty, _, mems) -> envInsertMembers con_ty mems env) env cons)
            . envInsertSize ty_n s
@@ -144,31 +147,33 @@ genDefn env = \case
            . envInsertConstrs [(ty_n, ty, con_n, con_ty, ty_params) | (con_n, con_ty, ty_params, _) <- cons]
            $ env
 
-genFunc :: (MonadFix m, MonadModuleBuilder m) => Env -> Core.Func -> m Operand
-genFunc env (Core.Func name args body retty) = mdo
-  function (str2Name name) [ (genType env ty, str2Param n) | (n, ty) <- args] (genType env retty) $ \args' -> mdo
+genFunc :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Func -> m Operand
+genFunc env (LL.Func name args body@(LL.EType _ retty)) = mdo
+  let paramtys = [genType env ty | (LL.PType _ ty) <- args]
+      params = map (, NoParameterName) paramtys
+  function (str2Name name) params (genType env retty) $ \args' -> mdo
     entry <- block `named` "entry"
-    locals <- mapM (uncurry genFuncParam) (zip ((genType env . snd) <$> args) args')
-    let env' = envInsertLocals (zip (fst <$> args) locals) $ envInsertTypes [(n, genType env ty) | (n, ty) <- args] env
+    args'' <- mapM genFuncParam (zip paramtys args')
+    env' <- genPatExtractMany env (zip args args'')
     genBody env' body
 
-genFuncParam :: (MonadFix m, MonadModuleBuilder m) => Type -> Operand -> IRBuilderT m Operand
-genFuncParam ty op = do
+genFuncParam :: (MonadFix m, MonadModuleBuilder m) => (Type, Operand) -> IRBuilderT m Operand
+genFuncParam (ty, op) = do
   ptr <- alloca ty Nothing 4
   store ptr 4 op
   return ptr
 
-genExtern :: (MonadFix m, MonadModuleBuilder m) => Env -> Core.Extern -> m Operand
-genExtern env (Core.Extern name argtys retty) =
+genExtern :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Extern -> m Operand
+genExtern env (LL.Extern name argtys retty) =
   extern (str2Name name) (genType env <$> argtys) (genType env retty)
 
-genDataType :: (MonadFix m, MonadModuleBuilder m) => Env -> Int -> Core.DataType -> m (String, Type, [(String, Type, [Type], [Maybe String])])
-genDataType env s dt@(Core.DataType n cons) = do
+genDataType :: (MonadFix m, MonadModuleBuilder m) => Env -> Int -> LL.DataType -> m (String, Type, [(String, Type, [Type], [Maybe String])])
+genDataType env s dt@(LL.DataType n cons) = do
   ty <- typedef (str2Name n) (Just $ StructureType False [i8, ArrayType (fromIntegral s) i8] )
   cons' <- mapM (genDataTypeCon env n) cons
   return (n, ty, cons')
 
-genDataTypeCon :: (MonadFix m, MonadModuleBuilder m) => Env -> String -> (String, [(Maybe String, Core.Type)]) -> m (String, Type, [Type], [Maybe String])
+genDataTypeCon :: (MonadFix m, MonadModuleBuilder m) => Env -> String -> (String, [(Maybe String, LL.Type)]) -> m (String, Type, [Type], [Maybe String])
 genDataTypeCon env dt_name (con_name, ty_params) = do
   let n = dt_name ++ "_" ++ con_name
       ty_params' = [ genType env ty | (_, ty) <- ty_params]
@@ -176,19 +181,19 @@ genDataTypeCon env dt_name (con_name, ty_params) = do
                <*> pure ty_params'
                <*> pure (fst <$> ty_params)
 
-genType :: Env -> Core.Type -> Type
+genType :: Env -> LL.Type -> Type
 genType env = \case
-  Core.TCon n ->
+  LL.TCon n ->
       case envLookupTypeDef n env of
         Nothing -> error $ "undefined type encountered: " ++ n
         Just ty -> ty
-  Core.TPtr t -> ptr (genType env t)
-  Core.TI8 -> i8
-  Core.TI32 -> i32
-  Core.TString -> ptr i8
-  Core.TVoid -> AST.void
+  LL.TPtr t -> ptr (genType env t)
+  LL.TI8 -> i8
+  LL.TI32 -> i32
+  LL.TString -> ptr i8
+  LL.TVoid -> AST.void
 
-genBody :: (MonadFix m, MonadModuleBuilder m) => Env -> Core.Exp -> IRBuilderT m ()
+genBody :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Exp -> IRBuilderT m ()
 genBody env body = do
   body' <- genExp env body
   r <- load body' 4
@@ -197,15 +202,15 @@ genBody env body = do
 loadCallArg :: (MonadFix m, MonadModuleBuilder m) => Operand -> IRBuilderT m Operand
 loadCallArg arg = load arg 4
 
-loadExp :: (MonadFix m, MonadModuleBuilder m) => Env -> Core.Exp -> IRBuilderT m Operand
+loadExp :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Exp -> IRBuilderT m Operand
 loadExp env e = do
   e_ptr <- genExp env e
   load e_ptr 4
 
 
-genExp :: (MonadFix m, MonadModuleBuilder m) => Env -> Core.Exp -> IRBuilderT m Operand
+genExp :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Exp -> IRBuilderT m Operand
 genExp env = \case
-  Core.ECall f@(Core.EType _ (Core.TFunc retty _)) xs -> do
+  LL.ECall f@(LL.EType _ (LL.TFunc retty _)) xs -> do
     f' <- loadExp env f
     xs' <- mapM (loadExp env) xs
     r <- call f' [(x, []) | x <- xs']
@@ -232,19 +237,20 @@ genExp env = \case
             return r
       -}
 
-  Core.ELet vars body@(Core.EType _ t2) -> mdo
-    let t2' = genType env t2
-
-    env' <- foldM (\env (n, e) -> allocateVar env n e ) env vars
+  LL.ELet qs body -> mdo
+    let go env (p, e) = do
+          op <- genExp env e
+          genPatExtract env (p, op)
+    env' <- foldM go env qs
     genExp env' body
 
 
-  Core.EMatch s brs -> mdo
+  LL.EMatch s brs -> mdo
     s' <- genExp env s
     tag_ptr <- gep s' [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 0]
     tag <- load tag_ptr 4
 
-    let (_, _, Core.EType _ ty) = NE.head brs
+    let (_, _, LL.EType _ ty) = NE.head brs
         ty' = genType env ty
     res <- alloca ty' Nothing 4
 
@@ -257,19 +263,19 @@ genExp env = \case
     exit_blk <- block `named` "switch_exit"
     return res
     
-  Core.EVal v ->
+  LL.EVal v ->
     genValue env v
 
-  Core.EOp op ->
+  LL.EOp op ->
     genOp env op
 
 
-allocateVar :: (MonadFix m, MonadModuleBuilder m) => Env -> (Maybe String) -> Core.Exp -> IRBuilderT m Env
+allocateVar :: (MonadFix m, MonadModuleBuilder m) => Env -> (Maybe String) -> LL.Exp -> IRBuilderT m Env
 allocateVar env Nothing e = do
   _ <- genExp env e
   return env
 
-allocateVar env (Just n) e@(Core.EType _ ty) = do
+allocateVar env (Just n) e@(LL.EType _ ty) = do
   let ty' = genType env ty
   case ty' of
     VoidType -> allocateVar env Nothing e
@@ -286,7 +292,7 @@ allocateVar env (Just n) e@(Core.EType _ ty) = do
       return env'
 
 
-genCase :: (MonadFix m, MonadModuleBuilder m) => Env -> Operand -> Operand -> Name -> (String, [Maybe String], Core.Exp) -> IRBuilderT m (C.Constant, Name)
+genCase :: (MonadFix m, MonadModuleBuilder m) => Env -> Operand -> Operand -> Name -> (String, [Maybe String], LL.Exp) -> IRBuilderT m (C.Constant, Name)
 genCase env par res exit_blk (n, xs, body) = do
   blk <- block `named` "case"
   case envLookupConstr n env of
@@ -312,58 +318,58 @@ genCaseLocal par (ty, Just n, i) = do
   return $ Just (n, ty, local)
 
 
-genOp :: (MonadFix m, MonadModuleBuilder m) => Env -> Core.Op -> IRBuilderT m Operand
+genOp :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Op -> IRBuilderT m Operand
 genOp env = \case
-  Core.IArithOp op -> do
+  LL.IArithOp op -> do
     ptr <- alloca i32 Nothing 4
     op' <- genIArithOp env op
     store ptr 4 op'
     return ptr
 
-  Core.FArithOp op -> undefined
-  Core.PtrOp    op -> genPtrOp env op
-  Core.MemOp    op -> genMemOp env op
-  Core.ArrayOp  op -> undefined
+  LL.FArithOp op -> undefined
+  LL.PtrOp    op -> genPtrOp env op
+  LL.MemOp    op -> genMemOp env op
+  LL.ArrayOp  op -> undefined
 
-genIArithOp :: (MonadFix m, MonadModuleBuilder m) => Env -> Core.IArithOp -> IRBuilderT m Operand
+genIArithOp :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.IArithOp -> IRBuilderT m Operand
 genIArithOp env = \case
-  Core.AddOpI a b -> do
+  LL.AddOpI a b -> do
     a_ptr' <- genExp env a 
     b_ptr' <- genExp env b
     a' <- load a_ptr' 4
     b' <- load b_ptr' 4
     add a' b'
 
-  Core.SubOpI a b -> do
+  LL.SubOpI a b -> do
     a_ptr' <- genExp env a 
     b_ptr' <- genExp env b
     a' <- load a_ptr' 4
     b' <- load b_ptr' 4
     mul a' b'
 
-  Core.MulOpI a b -> do
+  LL.MulOpI a b -> do
     a_ptr' <- genExp env a 
     b_ptr' <- genExp env b
     a' <- load a_ptr' 4
     b' <- load b_ptr' 4
     mul a' b'
 
-genPtrOp :: (MonadFix m, MonadModuleBuilder m) => Env -> Core.PtrOp -> IRBuilderT m Operand
+genPtrOp :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.PtrOp -> IRBuilderT m Operand
 genPtrOp env = \case
-  Core.RefOp e -> genExp env e  -- We already keep everything in pointers
+  LL.RefOp e -> genExp env e  -- We already keep everything in pointers
 
   -- To deref, assume that e generates an operand which is
   -- a pointer to a pointer. We simply load the pointer,
   -- because this gives us a pointer to a value, which is
   -- basically the raw value in llvm.
-  Core.DerefOp e -> do
+  LL.DerefOp e -> do
     e_ptr_ptr' <- genExp env e 
     load e_ptr_ptr' 4
 
 
-genMemOp :: (MonadFix m, MonadModuleBuilder m) => Env -> Core.MemOp -> IRBuilderT m Operand
+genMemOp :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.MemOp -> IRBuilderT m Operand
 genMemOp env = \case
-  Core.ConstrOp (Core.Constr n args) ->
+  LL.ConstrOp (LL.Constr n args) ->
     case envLookupConstr n env of
       Nothing -> error $ "undefined constructor: " ++ n
       Just (_, ty, con_ty, i, _) -> do
@@ -377,14 +383,14 @@ genMemOp env = \case
 
         return ptr
 
-  Core.NewOp (Core.Constr n args) -> mdo
+  LL.NewOp (LL.Constr n args) -> mdo
     case envLookupConstr n env of
       Nothing -> error $ "undefined constructor: " ++ n
       Just (ty_n, ty, con_ty, i, _) ->
         case envLookupSize ty_n env of
           Nothing -> error $ "unsized constructor: " ++ n
           Just s -> do
-            ptr_i8 <- genExp env (Core.ECall (Core.EVal $ Core.VVar "malloc") [Core.EVal $ Core.VInt (s+1)])
+            ptr_i8 <- genExp env (LL.ECall (LL.EVal $ LL.VVar "malloc") [LL.EVal $ LL.VInt (s+1)])
             ptr <- bitcast ptr_i8 (AST.ptr $ AST.ptr ty)
 
             ptr' <- load ptr 4
@@ -397,17 +403,17 @@ genMemOp env = \case
             return ptr
 
 
-  Core.FreeOp e ->
-    genExp env (Core.ECall (Core.EVal $ Core.VVar "free") [e])
+  LL.FreeOp e ->
+    genExp env (LL.ECall (LL.EVal $ LL.VVar "free") [e])
 
 
-  Core.MemAccessI a i_val -> mdo
+  LL.MemAccessI a i_val -> mdo
     i_ptr <- genExp env i_val
     i <- load i_ptr 4
     a' <- genExp env a
     gep a' [ConstantOperand $ C.Int 32 0, i]
 
-  Core.MemAccess a n -> mdo
+  LL.MemAccess a n -> mdo
     case envLookupMember n env of
       Nothing -> error $ "unrecognized member name: " ++ n
       Just (con_ty, i)  -> do
@@ -416,7 +422,7 @@ genMemOp env = \case
         gep b [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 (toInteger i)]
 
  
-  Core.MemUpdate n rhs -> mdo
+  LL.MemUpdate n rhs -> mdo
     case envLookupLocal n env of
       Nothing -> error $ "unrecognized variable: " ++ n
       Just v  -> mdo
@@ -426,10 +432,10 @@ genMemOp env = \case
         return v
 
 
-genArrayOp :: (MonadFix m, MonadModuleBuilder m) => Env -> Core.MemOp -> IRBuilderT m Operand
+genArrayOp :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.MemOp -> IRBuilderT m Operand
 genArrayOp env = undefined
 
-genConstrArg :: (MonadFix m, MonadModuleBuilder m) => Env -> Operand -> (Core.Exp, Int) -> IRBuilderT m ()
+genConstrArg :: (MonadFix m, MonadModuleBuilder m) => Env -> Operand -> (LL.Exp, Int) -> IRBuilderT m ()
 genConstrArg env ptr (arg, i) = do
   ptr' <- gep ptr [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 (toInteger i)]
   arg' <- genExp env arg
@@ -438,25 +444,51 @@ genConstrArg env ptr (arg, i) = do
 
 
 
-genValue :: (MonadFix m, MonadModuleBuilder m) => Env -> Core.Val -> IRBuilderT m Operand
+genValue :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Val -> IRBuilderT m Operand
 genValue env = \case
-  Core.VInt i -> do
+  LL.VInt i -> do
     ptr <- alloca i32 Nothing 4
     store ptr 4 (ConstantOperand $ C.Int 32 (toInteger i))
     return ptr
 
-  Core.VString str -> do
+  LL.VString str -> do
     str_gptr <- globalStringPtr str =<< freshName "gstring"
     str_gptr' <- bitcast str_gptr (AST.ptr i8)
     val_ptr <- alloca (AST.ptr i8) Nothing 4
     store val_ptr 4 str_gptr
     return val_ptr
 
-  Core.VVar n -> case envLookupLocal n env of
+  LL.VVar n -> case envLookupLocal n env of
     Nothing -> error $ "undefined var: " ++ n
     Just local -> return local
 
 
+genPatExtractMany :: (MonadFix m, MonadModuleBuilder m) => Env -> [(LL.Pat, Operand)] -> IRBuilderT m Env
+genPatExtractMany = foldM genPatExtract
+
+genPatExtract :: (MonadFix m, MonadModuleBuilder m) => Env -> (LL.Pat, Operand) -> IRBuilderT m Env
+genPatExtract env (LL.PType p ty, op) = genPatExtract' env ty op p
+
+genPatExtract' :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Type -> Operand -> LL.Pat -> IRBuilderT m Env
+genPatExtract' env ty op = \case
+  LL.PVar n ->
+    return $ envInsertType n (genType env ty)
+           $ envInsertLocal n op env
+
+  LL.PCon _ ps -> do
+    let ty' = genType env ty
+    con_ptr <- bitcast op (ptr $ ty')
+    
+    let go (env, i) p = do
+          op' <- gep op [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 i]
+          env' <- genPatExtract env (p, op')
+          return (env', i+1)
+    fst <$> foldM go (env, 1) ps
+
+  LL.PWild -> return env
+
+  LL.PType p ty' -> genPatExtract' env ty' op p
+    
 
 -- Helpers for conversion from strings to names
 

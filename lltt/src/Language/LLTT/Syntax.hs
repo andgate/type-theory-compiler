@@ -1,5 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
-module Language.STLC.Core.Syntax where
+module Language.LLTT.Syntax where
 
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
@@ -20,7 +20,7 @@ data Defn
   | ExternDefn Extern
   | DataTypeDefn DataType
 
-data Func = Func String [(String, Type)] Exp Type
+data Func = Func String [Pat] Exp
 
 data Extern = Extern String [Type] Type
 
@@ -41,7 +41,7 @@ data Pat
   = PVar String
   | PCon String [Pat]
   | PWild
-  | PType Type
+  | PType Pat Type
 
 data Else
   = Else Exp

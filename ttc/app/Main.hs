@@ -9,11 +9,13 @@ import Language.STLC.Lifted.Infer
 import Language.STLC.Lifted.Match
 import Language.STLC.Lifted.Desugar
 
-import Language.STLC.Core.Codegen
+import Language.LLTT.LLVM.Codegen
 
 import qualified LLVM.Module as LLVM
 import qualified LLVM.Internal.Context as LLVM
 import qualified LLVM.AST as AST
+
+import Unbound.Generics.LocallyNameless
 
 mallocExtern = ExternDefn $ Extern "malloc" [TI32] (TPtr TI8)
 freeExtern = ExternDefn $ Extern "free" [TPtr TI8] (TVoid)
@@ -21,90 +23,132 @@ memcpyExtern = ExternDefn $ Extern "memcpy" [TPtr TI8, TPtr TI8, TI32] (TPtr TI8
 putsExtern = ExternDefn $ Extern "puts" [TPtr TI8] TI32
 
 
-derefIntFunc = FuncDefn $ Func "derefInt" [("a", TPtr TI32)] body TI32
-  where body = EOp $ PtrOp $ DerefOp TI32 (VVar "a")
+derefIntFunc = FuncDefn $ func "derefInt"
+                               (tarr [TPtr TI32] TI32)
+                               [(PType (pvar "a") (TPtr TI32))]
+                               body
+  where body = EDeref (evar "a")
 
 maybeIntType = DataTypeDefn $ DataType "MaybeInt" [("Nothing", []), ("Just", [(Nothing, TI32)])]
 
 iVector3Type = DataTypeDefn $ DataType "IVector3" [("V3", [(Just "x", TI32), (Just "y", TI32), (Just "z", TI32)])]
 
-nothingFunc = FuncDefn $ Func "nothing" [] body (TCon "MaybeInt")
-  where body = EOp $ MemOp $ ConstrOp (Constr "Nothing" [])
+nothingFunc = FuncDefn $ func "nothing" (TCon "MaybeInt") [] body 
+  where body = ECon "Nothing" []
 
-just5Func = FuncDefn $ Func "just5" [] body (TPtr $ TCon "MaybeInt")
-  where body = EOp $ MemOp $ NewOp (Constr "Just" [VInt 5])
-
-
-dotFunc = FuncDefn $ Func "dot" [("v1", TCon "IVector3"), ("v2", TCon "IVector3")] body TI32
-  where body  = ELet (Just "x1") TI32 (EOp $ MemOp $ MemAccess (VVar "v1") "x") TI32
-              $ ELet (Just "y1") TI32 (EOp $ MemOp $ MemAccess (VVar "v1") "y") TI32
-              $ ELet (Just "z1") TI32 (EOp $ MemOp $ MemAccess (VVar "v1") "z") TI32
-              $ ELet (Just "x2") TI32 (EOp $ MemOp $ MemAccess (VVar "v2") "x") TI32
-              $ ELet (Just "y2") TI32 (EOp $ MemOp $ MemAccess (VVar "v2") "y") TI32
-              $ ELet (Just "z2") TI32 (EOp $ MemOp $ MemAccess (VVar "v2") "z") TI32
-              $ ELet (Just "a1") TI32 (EOp $ IArithOp $ MulOpI (VVar "x1") (VVar "x2")) TI32
-              $ ELet (Just "a2") TI32 (EOp $ IArithOp $ MulOpI (VVar "y1") (VVar "y2")) TI32
-              $ ELet (Just "a3") TI32 (EOp $ IArithOp $ MulOpI (VVar "z1") (VVar "z2")) TI32
-              $ ELet (Just "a4") TI32 (EOp $ IArithOp $ AddOpI (VVar "a1") (VVar "a2")) TI32
-              $ ELet (Just "a5") TI32 (EOp $ IArithOp $ AddOpI (VVar "a3") (VVar "a4")) TI32
-              $ EVal (VVar "a5")
+just5Func = FuncDefn $ func "just5" (TPtr $ TCon "MaybeInt") [] body
+  where body = ENewCon "Just" [EInt 5]
 
 
-exMaybeFunc = FuncDefn $ Func "exMaybe" [("may_x", TCon "MaybeInt")] body TI32
-  where body = EMatch (VVar "may_x") TI32
-                      [ ( "Just"   , [Just "x"], EVal $ VVar "x")
-                      , ( "Nothing" , [], EVal $ VInt 0) ]
-
-addFunc = FuncDefn $ Func "add" [("a", TI32), ("b", TI32)] body TI32
-  where body = EOp (IArithOp (AddOpI (VVar "a") (VVar "b")))
-
-mulFunc = FuncDefn $ Func "mul" [("a", TI32), ("b", TI32)] body TI32
-  where body = EOp (IArithOp (MulOpI (VVar "a") (VVar "b")))
-
-constFunc = FuncDefn $ Func "const" [("a", TI32), ("b", TI32)] body TI32
-  where body = EVal (VVar "a")
-
-idFunc = FuncDefn $ Func "id" [("x", TI32)] body TI32
-  where body = EVal (VVar "x")
-
-idMaybeFunc = FuncDefn $ Func "idMaybe" [("x", TCon "MaybeInt")] body (TCon "MaybeInt")
-  where body = EVal (VVar "x")
-
-addMulFunc = FuncDefn $ Func "addMul" [("a", TI32), ("b", TI32), ("c", TI32)] body TI32
-  where body = ELet (Just "d") TI32 (ECall "add" [VVar "a", VVar "b"]) TI32 $
-               ELet (Just "e") TI32 (ECall "mul" [VVar "d", VVar "c"]) TI32 $
-               ECall "id" [(VVar "e")]
+dotFunc = FuncDefn $ func "dot"
+                          ( tarr [TCon "IVector3", TCon "IVector3"] TI32 )
+                          [ PType (pvar "v1") (TCon "IVector3")
+                          , PType (pvar "v2") (TCon "IVector3") ]
+                          body
+  where body  = elet [ (pvar "x1", EMember (evar "v1") "x")
+                     , (pvar "y1", EMember (evar "v1") "y")
+                     , (pvar "z1", EMember (evar "v1") "z")
+                     , (pvar "x2", EMember (evar "v2") "x")
+                     , (pvar "y2", EMember (evar "v2") "y")
+                     , (pvar "z2", EMember (evar "v2") "z")
+                     , (pvar "a1", EOp $ OpMulI (evar "x1") (evar "x2"))
+                     , (pvar "a2", EOp $ OpMulI (evar "y1") (evar "y2"))
+                     , (pvar "a3", EOp $ OpMulI (evar "z1") (evar "z2"))
+                     , (pvar "a4", EOp $ OpAddI (evar "a1") (evar "a2"))
+                     , (pvar "a5", EOp $ OpAddI (evar "a3") (evar "a4")) ]
+                     $ evar "a5"
 
 
-maybeAddMulFunc = FuncDefn $ Func "maybeAddMul" [("may_a", TCon "MaybeInt"), ("may_b", TCon "MaybeInt"), ("may_c", TCon "MaybeInt")] body (TCon "MaybeInt")
-  where body = EMatch (VVar "may_a") (TCon "MaybeInt")
-                      [ ( "Nothing", [], EOp $ MemOp $ ConstrOp (Constr "Nothing" []))
-                      , ( "Just"   , [Just "a"],
-                              EMatch (VVar "may_b") (TCon "MaybeInt")
-                                    [ ("Nothing", []        , EOp $ MemOp $ ConstrOp (Constr "Nothing" []))
-                                    , ("Just"   , [Just "b"],
-                                          EMatch (VVar "may_c") (TCon "MaybeInt")
-                                                [ ("Nothing", [], EOp $ MemOp $ ConstrOp (Constr "Nothing" []))
-                                                , ("Just", [Just "c"],
-                                                    ELet (Just "d") TI32 (ECall "addMul" [VVar "a", VVar "b", VVar "c"]) (TCon "MaybeInt")
-                                                          (EOp $ MemOp $ ConstrOp (Constr "Just" [VVar "d"]))       
-                                                  )
-                                                ]
-                                      )
-                                    ]
-                                    
-                            )
-                      ]
+exMaybeFunc = FuncDefn $ func "exMaybe"
+                              (tarr [TCon "MaybeInt"] TI32)
+                              [PType (pvar "may_x") (TCon "MaybeInt")]
+                              body
+  where body = ecase (evar "may_x")
+                     [ (PCon "Just" [pvar "x"], evar "x")
+                     , (PCon "Nothing"  [], EInt 0)
+                     ]
 
-mainFunc = FuncDefn $ Func "main" [("argc", TI32), ("argv", TPtr (TPtr (TI8)))] body TI32
-  where body = ELet (Just "hello") TString (EVal $ VString "Hello World") TI32 $
-               ELet (Just "five") TString (EVal $ VString "5") TI32 $
-               ELet (Just "may_5_ptr") (TPtr $ TCon "MaybeInt") (ECall "just5" []) TI32 $
-               ELet (Just "may_5") (TCon "MaybeInt") (EOp $ PtrOp $ DerefOp (TCon "MaybeInt") (VVar "may_5_ptr")) TI32 $
-               ELet (Just "may_not") (TCon "MaybeInt") (ECall "nothing" []) TI32 $
-               EMatch (VVar "may_5") TI32
-                      [ ("Nothing", [], ECall "puts" [VVar "hello"])
-                      , ("Just", [Just "c"], ECall "puts" [VVar "five"])       
+addFunc = FuncDefn $ func "add"
+                          (tarr [TI32, TI32] TI32)
+                          [ PType (pvar "a") TI32
+                          , PType (pvar "b") TI32]
+                          body 
+  where body = EOp $ OpAddI (evar "a") (evar "b")
+
+mulFunc = FuncDefn $ func "mul"
+                          (tarr [TI32, TI32] TI32)
+                          [ PType (pvar "a") TI32
+                          , PType (pvar "b") TI32]
+                          body 
+  where body = EOp $ OpMulI (evar "a") (evar "b")
+
+constFunc = FuncDefn $ func "const"
+                          (tarr [TI32, TI32] TI32)
+                          [ PType (pvar "a") TI32
+                          , PType (pvar "b") TI32]
+                          body 
+  where body = evar "a"
+
+idFunc = FuncDefn $ func "id"
+                          (tarr [TI32] TI32)
+                          [ PType (pvar "x") TI32 ]
+                          body 
+  where body = evar "x"
+
+
+idMaybeFunc = FuncDefn $ func "idMaybe"
+                          (tarr [TCon "MaybeInt"] (TCon "MaybeInt"))
+                          [ PType (pvar "x") (TCon "MaybeInt") ]
+                          body 
+  where body = evar "x"
+
+
+addMulFunc = FuncDefn $ func "addMul"
+                        (tarr [TI32, TI32, TI32] TI32)
+                        [ PType (pvar "a") TI32
+                        , PType (pvar "b") TI32
+                        , PType (pvar "c") TI32]
+                        body
+  where body = elet [ (PType (pvar "d") TI32, eapp "add" [evar "a", evar "b"])
+                    , (PType (pvar "e") TI32, eapp "mul" [evar "d", evar "c"]) ] 
+                    $ eapp "id" [evar "e"]
+
+
+maybeAddMulFunc = FuncDefn $ func "maybeAddMul"
+                                  ( tarr [ TCon "MaybeInt"
+                                         , TCon "MaybeInt"
+                                         , TCon "MaybeInt" ] 
+                                         (TCon "MaybeInt") )
+                                  [ PType (pvar "may_a") (TCon "MaybeInt")
+                                  , PType (pvar "may_b") (TCon "MaybeInt")
+                                  , PType (pvar "may_c") (TCon "MaybeInt") ]
+                                  body
+  where body = ecase (evar "may_a")
+                      [ ( PCon "Nothing" [], ECon "Nothing" [])
+                      , ( PCon "Just" [pvar "a"], case2) ]
+        case2 = ecase (evar "may_b")
+                      [ (PCon "Nothing" [] , ECon "Nothing" [])
+                      , (PCon "Just" [pvar "b"], case3) ]
+        case3 = ecase (evar "may_c")
+                      [ (PCon "Nothing" [], ECon "Nothing" [])
+                      , (PCon "Just" [pvar "c"], let1) ]
+        let1 = elet [ (pvar "d", eapp "addMul" [evar "a", evar "b", evar "c"]) ]
+                    (ECon "Just" [evar "d"])
+
+mainFunc = FuncDefn $ func "main"
+                           (tarr [TI32, TPtr (TPtr TI8)] TI32)
+                           [ PType (pvar "argc") TI32
+                           , PType (pvar "argv") (TPtr (TPtr TI8)) ]
+                           body 
+  where body = elet [ (pvar "hello", EString "Hello World")
+                    , (pvar "five", EString "5")
+                    , (pvar "may_5_ptr", evar "just5")
+                    , (pvar "may_5", EDeref $ evar "may_5_ptr")
+                    , (pvar "may_not", evar "nothing") ]
+                    case1
+        case1 = ecase (evar "may_5")
+                      [ (PCon "Nothing" [], eapp "puts" [evar "hello"])
+                      , (PCon "Just" [pvar "c"], eapp "puts" [evar "five"])       
                       ]
 
 testSource :: [Defn]
@@ -131,7 +175,11 @@ testSource = [ mallocExtern
 
 
 sampleModule :: AST.Module
-sampleModule = genModule envEmpty testSource
+sampleModule = genModule envEmpty
+             . desugarModule
+             . matchModule
+             . inferModule
+             $ testSource
 
 
 main :: IO ()

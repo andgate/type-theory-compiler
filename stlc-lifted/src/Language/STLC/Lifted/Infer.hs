@@ -37,6 +37,46 @@ withTypes :: MonadReader Env m => [(Var, Type)] -> m a -> m a
 withTypes ns = local (\env -> foldl f env ns)
   where f env (n, ty) = Map.insert n ty env 
 
+inferModule :: [Defn] -> [Defn]
+inferModule modl = runFreshM (runReaderT m env)
+  where env = makeEnv modl
+        m = mapM inferDefn modl
+
+makeEnv :: [Defn] -> Map Var Type
+makeEnv = Map.fromList . concatMap f
+  where f = \case
+          FuncDefn (Func ty rbnd) ->
+            let (v, _) = unrebind rbnd
+            in [(v, ty)]
+          
+          ExternDefn (Extern n paramty retty) ->
+            [(s2n n, tarr paramty retty)]
+
+          DataTypeDefn (DataType dt_n dt_cons) -> do
+            (con_n, con_params) <- dt_cons
+            let v = s2n con_n
+                ty = tarr (snd <$> con_params)
+                          (TCon dt_n)
+            return (v, ty)
+
+
+inferDefn :: MonadInfer m => Defn -> m Defn
+inferDefn = \case
+  FuncDefn (Func ty rbnd) -> do
+    let (f, bnd) = unrebind rbnd
+    (ps, body) <- unbind bnd
+
+    ps' <- mapM inferPat ps
+    body' <- infer body
+
+    let bnd' = bind ps' body'
+        rbnd' = rebind f bnd'
+
+    return $ FuncDefn $ Func ty rbnd'
+
+  defn -> return defn
+
+
 infer :: MonadInfer m => Exp -> m Exp
 infer = \case
   e@(EVar v) -> EType e <$> lookupType v

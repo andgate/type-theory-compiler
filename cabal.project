@@ -1,5 +1,7 @@
-packages: stlc-core/
-          stlc-core-llvm/
+packages: lltt/
+          lltt-llvm/
           stlc-lifted/
+          stlc/
+          stlc-frontend/
           systemf/
           ttc/

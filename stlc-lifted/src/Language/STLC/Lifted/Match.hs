@@ -22,6 +22,10 @@ data Env = Env { envArity   :: Map Constr Int
 type MonadMatch m = (MonadReader Env m, Fresh m)
 
 
+matchModule :: [Defn] -> [Defn]
+matchModule modl = undefined
+
+
 arity :: MonadMatch m => String -> m Int
 arity c = reader (Map.lookup c . envArity) >>= maybe err return
   where err = error $ "Match: unrecognized constructor name: " ++ c
@@ -83,7 +87,7 @@ matchClause c (u:us) qs def = do
   k <- arity c
   us' <- mapM (\_ -> fresh (s2n "match.x")) [1..k] -- this is wrong, should be arity
   body <- match (us' ++ us) [(ps' ++ ps, e) | ((PCon n ps'):ps, e) <- qs] def
-  return $ Clause c (bind us' body)
+  return $ Clause (bind (PCon c (PVar <$> us')) body)
 
 choose :: String -> [Equation] -> [Equation]
 choose c qs = [q | q <- qs, getCon q == c]

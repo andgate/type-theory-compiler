@@ -8,59 +8,59 @@ module Language.STLC.Lifted.Desugar where
 
 
 import Language.STLC.Lifted.Syntax
-import qualified Language.STLC.Core.Syntax as Core
+import qualified Language.LLTT.Syntax as LL
 
 import Control.Monad
 import Data.Maybe
 import Data.List
+import Data.Bitraversable
 
 import Unbound.Generics.LocallyNameless
 import Unbound.Generics.LocallyNameless.Name (name2String, s2n)
 
 -- This pass produces a desugared STLC syntax tree.
--- The end result of desugaring is STLC Core.
+-- The end result of desugaring is a Low-Level Type
+-- Theory (LLTT) ast.
 -- This is a form of the STLC which can be easily
 -- translated into LLVM IR.
 
+desugarModule :: [Defn] -> [LL.Defn]
+desugarModule modl = undefined
 
-desugarFunc :: Fresh m => Func -> m Core.Func
+desugarFunc :: Fresh m => Func -> m LL.Func
 desugarFunc (Func ty rbnd) = do
-  let (paramtys, retty) = splitType ty
   let (fn_n, bnd) = unrebind rbnd
+      fn_n' = name2String fn_n
   (ps, body) <- unbind bnd
-  paramtys' <- mapM desugarType paramtys
-  retty' <- desugarType retty
-  when (length paramtys' /= length ns)
-       $ error $ "arity mismatch in function call: " <> fn_n
-  let params' = zip (name2String <$> ns)  paramtys'
-  (body', caps) <- desugarExp body
-  body'' <- bindCaptures caps body' retty'
-  return $ Core.Func fn_n params' body'' retty'
+  ps' <- mapM desugarPat ps
+  body' <- desugarExp body
+  return $ LL.Func fn_n' ps' body'
 
-desugarExp  :: Fresh m => Exp -> m (Core.Exp, Captures)
+desugarExp  :: Fresh m => Exp -> m LL.Exp
 desugarExp (EType e ty) = desugarExp' ty e
 desugarExp _ = error "Expected typed expression!"
 
 
-desugarExp'  :: Fresh m => Type -> Exp -> m Core.Exp
+desugarExp'  :: Fresh m => Type -> Exp -> m LL.Exp
 desugarExp' ty = \case
   EVar n ->
-    return (Core.EVal . Core.VVar . name2String $ n, [])
+    return $ LL.EVal . LL.VVar . name2String $ n
   
   EApp f xs -> do
     f' <- desugarExp f
     xs' <- mapM desugarExp xs
-    return $ Core.ECall f' xs'
+    return $ LL.ECall f' xs'
   
   ELet bnd -> do
     (rbnd, body) <- unbind bnd
     let (ps, es) = unzip [(p, e) | (p, Embed e)<- untelescope rbnd]
     case body of
       EType _ body_ty -> do
+        ps' <- mapM desugarPat ps
         es' <- mapM desugarExp es
         body' <- desugarExp body
-        let rhs = zip (desugarPat <$> ps) es'
-        return $ Core.ELet rhs body'
+        let rhs = zip ps' es'
+        return $ LL.ELet rhs body'
       
       _ -> error "desugar: unable to unbind let!"
 
@@ -68,28 +68,32 @@ desugarExp' ty = \case
   EType e ty -> return $ error "Unexpected type annotation encountered"
 
 
-desugarVal :: Exp -> Maybe (Core.Val)
+desugarVal :: Exp -> Maybe (LL.Val)
 desugarVal = \case
-  EVar n -> Just . Core.VVar . name2String $ n
+  EVar n -> Just . LL.VVar . name2String $ n
   EApp _ _ -> Nothing
   ELet _ -> Nothing
   EType e _ -> desugarVal e
-  EInt i -> Just $ Core.VInt i
+  EInt i -> Just $ LL.VInt i
 
-desugarType :: Fresh m => Type -> m Core.Type
+desugarType :: Fresh m => Type -> m LL.Type
 desugarType = \case
   ty@(TArr a b) ->
     let (paramtys, retty) = splitType ty
-    in Core.TFunc <$> desugarType retty <*> mapM desugarType paramtys 
+    in LL.TFunc <$> desugarType retty <*> mapM desugarType paramtys 
 
-  TCon n  -> pure $ Core.TCon n
-  TI8     -> pure Core.TI8
-  TI32    -> pure Core.TI32
-  TArray i ty -> Core.TArray i <$> desugarType ty
-  TPtr ty -> Core.TPtr <$> desugarType ty
-  TString -> pure Core.TString
-  TVoid   -> pure Core.TVoid
+  TCon n  -> pure $ LL.TCon n
+  TI8     -> pure LL.TI8
+  TI32    -> pure LL.TI32
+  TArray i ty -> LL.TArray i <$> desugarType ty
+  TPtr ty -> LL.TPtr <$> desugarType ty
+  TString -> pure LL.TString
+  TVoid   -> pure LL.TVoid
   
 
-desugarPattern :: Pat -> [Core.Pat]
-desugarPattern 
+desugarPat :: Fresh m => Pat -> m LL.Pat
+desugarPat = \case
+  PVar v     -> pure $ LL.PVar (name2String v)
+  PCon n ps  -> LL.PCon n <$> mapM desugarPat ps
+  PWild      -> pure LL.PWild
+  PType p ty -> LL.PType <$> desugarPat p <*> desugarType ty

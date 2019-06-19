@@ -16,9 +16,9 @@ import Unbound.Generics.LocallyNameless
 
 type Var = Name Exp
 
-data FuncClosure =
+data FuncClosure
   = FCEmpty
-  | FCCons (Bind Func Closure)
+  | FCCons (Bind Func FuncClosure)
   deriving (Show, Generic, Typeable)
   
 
@@ -46,7 +46,8 @@ data LetBind
   | LetFunc (Rebind (Var, Embed (Bind [Var] Exp)) LetBind)
   deriving (Show, Generic, Typeable)
 
-data Clause = Clause (Bind Pat Bind)
+data Clause = Clause (Bind Pat Exp)
+  deriving (Show, Generic, Typeable)
 
 data Pat
   = PVar Var
