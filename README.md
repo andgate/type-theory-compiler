@@ -15,8 +15,9 @@ In the future, we hope to have a dependent type theory of some kind,
 which is capable of checking resource usage. The current candidate theory
 is Quantitative Type Theory (QTT).
 Another subject of interest is laziness. We may look into an alternate
-backend which will compile to lazy, garbage collected code. Another area
-of interest is interactions between theories.
+backend which will compile to lazy, garbage collected code.
+Linear languages may also be a possible future target.
+Currently, it's not clear how languages should interact.
 
 
 ## Requirements
