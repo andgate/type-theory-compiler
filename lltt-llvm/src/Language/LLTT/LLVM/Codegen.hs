@@ -25,7 +25,8 @@ import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
 import LLVM.AST hiding (function)
-import LLVM.AST.Type as AST
+import LLVM.AST.Type as Ty
+import LLVM.AST.Typed as Ty
 import LLVM.AST.Operand as AST
 import qualified LLVM.AST.Float as F
 import qualified LLVM.AST.Constant as C
@@ -80,8 +81,11 @@ envLookupLocal n env = Map.lookup n (envLocals env)
 envInsertFunc :: String -> Operand -> Env -> Env
 envInsertFunc n op env = env { envFuncs = Map.insert n op (envFuncs env) }
 
-envLookupFunc :: String -> Env -> Maybe Operand
-envLookupFunc n env = Map.lookup n (envFuncs env)
+envLookupFunc :: String -> Env -> Operand
+envLookupFunc n env = 
+  case Map.lookup n (envFuncs env) of
+    Just op -> op
+    Nothing -> error $ "envLookupFunc - Couldn't find function " ++ n
 
 
 envInsertSize :: String -> Int -> Env -> Env
@@ -133,6 +137,9 @@ genDefn env = \case
     f' <- genFunc env f
     return $ envInsertFunc n f'
            $ envInsertType n ty env
+  
+  LL.FuncDefn f@(LL.Func n _ _) ->
+    error $ "Codegen error: Function body is untyped for \'" ++ n ++ "\'."
 
   LL.ExternDefn ex@(LL.Extern n _ ty) -> do
     ex' <- genExtern env ex
@@ -148,10 +155,10 @@ genDefn env = \case
            $ env
 
 genFunc :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Func -> m Operand
-genFunc env (LL.Func name args body@(LL.EType _ retty)) = mdo
+genFunc env (LL.Func name args body@(LL.EType _ retty)) = do
   let paramtys = [genType env ty | (LL.PType _ ty) <- args]
       params = map (, NoParameterName) paramtys
-  function (str2Name name) params (genType env retty) $ \args' -> mdo
+  function (str2Name name) params (genType env retty) $ \args' -> do
     entry <- block `named` "entry"
     args'' <- mapM genFuncParam (zip paramtys args')
     env' <- genPatExtractMany env (zip args args'')
@@ -191,7 +198,7 @@ genType env = \case
   LL.TI8 -> i8
   LL.TI32 -> i32
   LL.TString -> ptr i8
-  LL.TVoid -> AST.void
+  LL.TVoid -> Ty.void
 
 genBody :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Exp -> IRBuilderT m ()
 genBody env body = do
@@ -214,9 +221,7 @@ genExp env = \case
     f' <- loadExp env f
     xs' <- mapM (loadExp env) xs
     r <- call f' [(x, []) | x <- xs']
-
-    let retty' = genType env retty
-    r_ptr <- alloca retty' Nothing 4
+    r_ptr <- alloca (Ty.typeOf r) Nothing 4
     store r_ptr 4 r
     return r_ptr
 
@@ -236,18 +241,28 @@ genExp env = \case
             store r 4 op
             return r
       -}
+  LL.ECall f xs -> error $ "genExp - Expected a typed function.\n\n"
+                       ++ show f ++ " " ++ show xs ++ "\n\n"
 
-  LL.ELet qs body -> mdo
+  LL.EVal v ->
+    genValue env v
+
+  LL.ELet qs body -> do
     let go env (p, e) = do
           op <- genExp env e
           genPatExtract env (p, op)
-    env' <- foldM go env qs
+    env' <- foldM go env (reverse qs)
     genExp env' body
 
+  LL.EIf p thenb elseb -> do
+    error "Codegen: If unimplemented"
+
+  LL.EMatchI i brs -> do
+    error "Codegen: MatchI unimplemented"
 
   LL.EMatch s brs -> mdo
     s' <- genExp env s
-    tag_ptr <- gep s' [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 0]
+    tag_ptr <- gep s' [ConstantOperand $ C.Int 32 0]
     tag <- load tag_ptr 4
 
     let (_, _, LL.EType _ ty) = NE.head brs
@@ -263,11 +278,15 @@ genExp env = \case
     exit_blk <- block `named` "switch_exit"
     return res
     
-  LL.EVal v ->
-    genValue env v
 
   LL.EOp op ->
     genOp env op
+
+  LL.EType e ty ->
+    genExp env e
+
+  e -> error $ "genExp - Unsupported expression:\n\n"
+            ++ show e ++ "\n\n"
 
 
 allocateVar :: (MonadFix m, MonadModuleBuilder m) => Env -> (Maybe String) -> LL.Exp -> IRBuilderT m Env
@@ -298,7 +317,7 @@ genCase env par res exit_blk (n, xs, body) = do
   case envLookupConstr n env of
     Nothing -> error $ "undefined constructor: " ++ n
     Just (_, _, con_ty, i, ty_params) -> do
-      par' <- bitcast par (AST.ptr con_ty)
+      par' <- bitcast par (Ty.ptr con_ty)
       case_locals <- catMaybes <$> mapM (genCaseLocal par') (zip3 ty_params xs [1..])
       
       let env' = envInsertTypes [(n, ty) | (n, ty, _) <- case_locals] $
@@ -378,54 +397,58 @@ genMemOp env = \case
         tag <- gep ptr [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 0]
         store tag 4 (ConstantOperand $ C.Int 8 (toInteger i))
 
-        con_ptr <- bitcast ptr (AST.ptr con_ty)
+        con_ptr <- bitcast ptr (Ty.ptr con_ty)
         mapM_ (genConstrArg env con_ptr) (zip args [1..])
 
         return ptr
 
-  LL.NewOp (LL.Constr n args) -> mdo
+  LL.NewOp (LL.Constr n args) -> do
     case envLookupConstr n env of
       Nothing -> error $ "undefined constructor: " ++ n
       Just (ty_n, ty, con_ty, i, _) ->
         case envLookupSize ty_n env of
           Nothing -> error $ "unsized constructor: " ++ n
           Just s -> do
-            ptr_i8 <- genExp env (LL.ECall (LL.EVal $ LL.VVar "malloc") [LL.EVal $ LL.VInt (s+1)])
-            ptr <- bitcast ptr_i8 (AST.ptr $ AST.ptr ty)
+            let f = envLookupFunc "malloc" env
+            r <- call f [(ConstantOperand $ C.Int 32 (toInteger $ s+1), [])]
+            ptr_i8 <- alloca (Ty.typeOf r) Nothing 4
+            store ptr_i8 4 r
 
-            ptr' <- load ptr 4
-            tag <- gep ptr' [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 0]
-            store tag 4 (ConstantOperand $ C.Int 8 (toInteger i))
+            ptr <- bitcast ptr_i8 (Ty.ptr $ Ty.ptr ty)
+            tag_ptr <- gep ptr [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 0]
+            store tag_ptr 4 (ConstantOperand $ C.Int 8 (toInteger i))
 
-            con_ptr <- bitcast ptr' (AST.ptr con_ty)
+            con_ptr <- bitcast ptr (Ty.ptr con_ty)
             mapM_ (genConstrArg env con_ptr) (zip args [1..])
 
             return ptr
 
 
-  LL.FreeOp e ->
-    genExp env (LL.ECall (LL.EVal $ LL.VVar "free") [e])
+  LL.FreeOp e -> do
+    let f = envLookupFunc "free" env
+    e' <- genExp env e
+    call f [(e', [])]
 
 
-  LL.MemAccessI a i_val -> mdo
+  LL.MemAccessI a i_val -> do
     i_ptr <- genExp env i_val
     i <- load i_ptr 4
     a' <- genExp env a
     gep a' [ConstantOperand $ C.Int 32 0, i]
 
-  LL.MemAccess a n -> mdo
+  LL.MemAccess a n -> do
     case envLookupMember n env of
       Nothing -> error $ "unrecognized member name: " ++ n
       Just (con_ty, i)  -> do
         a' <- genExp env a
-        b <- bitcast a' (AST.ptr con_ty)
+        b <- bitcast a' (Ty.ptr con_ty)
         gep b [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 (toInteger i)]
 
  
-  LL.MemUpdate n rhs -> mdo
+  LL.MemUpdate n rhs -> do
     case envLookupLocal n env of
       Nothing -> error $ "unrecognized variable: " ++ n
-      Just v  -> mdo
+      Just v  -> do
         rhs_ptr' <- genExp env rhs
         rhs' <- load rhs_ptr' 4
         store v 4 rhs'
@@ -453,14 +476,50 @@ genValue env = \case
 
   LL.VString str -> do
     str_gptr <- globalStringPtr str =<< freshName "gstring"
-    str_gptr' <- bitcast str_gptr (AST.ptr i8)
-    val_ptr <- alloca (AST.ptr i8) Nothing 4
+    str_gptr' <- bitcast str_gptr (Ty.ptr i8)
+    val_ptr <- alloca (Ty.ptr i8) Nothing 4
     store val_ptr 4 str_gptr
     return val_ptr
 
   LL.VVar n -> case envLookupLocal n env of
-    Nothing -> error $ "undefined var: " ++ n
-    Just local -> return local
+    Nothing -> do
+      let f = envLookupFunc n env 
+      case Ty.typeOf f of
+        Ty.PointerType (Ty.FunctionType retty args _) _
+          | length args == 0 -> do
+                val_ptr <- alloca retty Nothing 4
+                f' <- load f 4
+                retval <- call f' []
+                store val_ptr 4 retval
+                return val_ptr
+
+          | otherwise -> return f
+        
+        Ty.FunctionType retty args _
+          | length args == 0 -> do
+                val_ptr <- alloca retty Nothing 4
+                retval <- call f []
+                store val_ptr 4 retval
+                return val_ptr
+
+          | otherwise -> return f
+        
+        ty -> error $ "\n\nExpected function to be stored as a pointer, found:\n\n"
+                  ++ show ty ++ "\n\n"
+
+    Just local ->
+      case Ty.typeOf local of
+        Ty.PointerType (Ty.FunctionType retty args _) _
+          | length args == 0 -> do
+                val_ptr <- alloca retty Nothing 4
+                local' <- load local 4
+                retval <- call local []
+                store val_ptr 4 retval
+                return val_ptr
+
+          | otherwise -> return local
+        
+        _ -> return local
 
 
 genPatExtractMany :: (MonadFix m, MonadModuleBuilder m) => Env -> [(LL.Pat, Operand)] -> IRBuilderT m Env
@@ -487,6 +546,7 @@ genPatExtract' env ty op = \case
 
   LL.PWild -> return env
 
+  LL.PType p LL.TVoid -> return env
   LL.PType p ty' -> genPatExtract' env ty' op p
     
 

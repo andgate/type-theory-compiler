@@ -4,6 +4,11 @@ module Main where
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
+import qualified Data.Text.IO as T
+
+import Language.STLC.Lifted.Pretty
+import Language.LLTT.Pretty
+
 import Language.STLC.Lifted.Syntax
 import Language.STLC.Lifted.Infer
 import Language.STLC.Lifted.Match
@@ -17,10 +22,16 @@ import qualified LLVM.AST as AST
 
 import Unbound.Generics.LocallyNameless
 
+
+import Data.Text.Prettyprint.Doc (Pretty (..))
+import Data.Text.Prettyprint.Doc.Render.Text (hPutDoc)
+
+import System.IO
+
 mallocExtern = ExternDefn $ Extern "malloc" [TI32] (TPtr TI8)
 freeExtern = ExternDefn $ Extern "free" [TPtr TI8] (TVoid)
 memcpyExtern = ExternDefn $ Extern "memcpy" [TPtr TI8, TPtr TI8, TI32] (TPtr TI8)
-putsExtern = ExternDefn $ Extern "puts" [TPtr TI8] TI32
+putsExtern = ExternDefn $ Extern "puts" [TString] TI32
 
 
 derefIntFunc = FuncDefn $ func "derefInt"
@@ -109,8 +120,8 @@ addMulFunc = FuncDefn $ func "addMul"
                         , PType (pvar "b") TI32
                         , PType (pvar "c") TI32]
                         body
-  where body = elet [ (PType (pvar "d") TI32, eapp "add" [evar "a", evar "b"])
-                    , (PType (pvar "e") TI32, eapp "mul" [evar "d", evar "c"]) ] 
+  where body = elet [ (pvar "d", eapp "add" [evar "a", evar "b"])
+                    , (pvar "e", eapp "mul" [evar "d", evar "c"]) ] 
                     $ eapp "id" [evar "e"]
 
 
@@ -174,13 +185,26 @@ testSource = [ mallocExtern
              ]
 
 
-sampleModule :: AST.Module
-sampleModule = genModule envEmpty
-             . desugarModule
-             . matchModule
-             . inferModule
-             $ testSource
+compileModule :: FilePath -> [Defn] -> IO ()
+compileModule fp modl = do
+  let stlc = modl
+  withFile (fp ++ ".stlc") WriteMode $ \h -> 
+    hPutDoc h $ pretty stlc
 
+  let stlc' = inferModule stlc
+  withFile (fp ++ "-typed.stlc") WriteMode $ \h -> 
+    hPutDoc h $ pretty stlc'
+  
+  let stlc'' = matchModule stlc'
+  withFile (fp ++ "-matched.stlc") WriteMode $ \h -> 
+    hPutDoc h $ pretty stlc''
+
+  let lltc = desugarModule stlc''
+  withFile (fp ++ ".lltc") WriteMode $ \h -> 
+    hPutDoc h $ pretty lltc
+
+  let llvmir = genModule envEmpty lltc
+  LLVM.withContext $ \c -> LLVM.withModuleFromAST c llvmir (LLVM.writeLLVMAssemblyToFile (LLVM.File (fp ++ ".ll")))
 
 main :: IO ()
-main = LLVM.withContext $ \c -> LLVM.withModuleFromAST c sampleModule (LLVM.writeLLVMAssemblyToFile (LLVM.File "test.ll"))
+main = compileModule "test" testSource

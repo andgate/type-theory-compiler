@@ -21,23 +21,18 @@ import Unbound.Generics.LocallyNameless
 
 type Var = Name Exp
 
-data FClosure
-  = FCEmpty
-  | FCCons (Bind Func FClosure)
-  deriving (Show, Generic, Typeable)
-
-type Funcs = Telescope Func
-
-
 data Defn
   = FuncDefn Func
   | ExternDefn Extern
   | DataTypeDefn DataType
+  deriving (Show, Generic, Typeable)
 
 data Extern = Extern String [Type] Type
+  deriving (Show, Generic, Typeable)
 
 data DataType =
   DataType String [(String, [(Maybe String, Type)])]
+  deriving (Show, Generic, Typeable)
 
 data Telescope a
   = TeleEmpty
@@ -54,19 +49,19 @@ untelescope (TeleCons bnd) =
   let (a, t) = unrebind bnd
   in a : untelescope t
 
-data Func = Func Type (Rebind Var (Bind [Pat] Exp))
+data Func = Func Type String (Bind [Pat] Exp)
   deriving (Show, Generic, Typeable)
 
 
 func :: String -> Type -> [Pat] -> Exp -> Func
-func n ty ps body = Func ty (rebind (string2Name n) (bind ps body))
+func n ty ps body = Func ty n (bind ps body)
 
 
 data Exp
   = EVar Var
   | EType Exp Type
   | EApp Exp [Exp]
-  | ELet (Bind (Telescope (Pat, Embed Exp)) Exp)
+  | ELet (Bind (Rec [(Pat, Embed Exp)]) Exp)
   | ECase Exp [Clause]
   | EInt Int
   | EString String
@@ -91,7 +86,7 @@ eapp :: String -> [Exp] -> Exp
 eapp f_n xs = EApp (evar f_n) xs 
 
 elet :: [(Pat, Exp)] -> Exp -> Exp
-elet qs body = ELet (bind (telescope (second embed <$> qs)) body)
+elet qs body = ELet (bind (rec (second embed <$> qs)) body)
 
 ecase :: Exp -> [(Pat, Exp)] -> Exp
 ecase e qs = ECase e [Clause (bind p e') | (p, e') <- qs]
@@ -145,12 +140,12 @@ data Clause = Clause (Bind Pat Exp)
 pvar :: String -> Pat
 pvar = PVar . s2n
 
-patTypedVars :: Pat -> [(Var, Type)]
+patTypedVars :: Pat -> [(String, Type)]
 patTypedVars (PType p ty) = patTypedVars' ty p
 
-patTypedVars' :: Type -> Pat -> [(Var, Type)]
+patTypedVars' :: Type -> Pat -> [(String, Type)]
 patTypedVars' ty = \case
-  PVar v -> [(v, ty)]
+  PVar v -> [(name2String v, ty)]
   PCon n ps -> concatMap patTypedVars ps
   PWild -> []
   PType p ty' -> patTypedVars' ty' p

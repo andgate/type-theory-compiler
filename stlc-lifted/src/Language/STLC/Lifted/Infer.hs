@@ -1,6 +1,7 @@
 {-# LANGUAGE LambdaCase
            , ConstraintKinds
            , FlexibleContexts
+           , ViewPatterns
           #-}
 module Language.STLC.Lifted.Infer where
 
@@ -14,26 +15,28 @@ import Language.STLC.Lifted.Syntax
 
 import Control.Monad.Reader
 
+import Data.Bifunctor
+import Data.List
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
 import Unbound.Generics.LocallyNameless
 
 
-type Env = Map Var Type
+type Env = Map String Type
 type Infer = ReaderT Env FreshM
 type MonadInfer m = (MonadReader Env m, Fresh m)
 
-lookupType :: MonadReader Env m => Var -> m Type
+lookupType :: MonadReader Env m => String -> m Type
 lookupType n
   = reader (Map.lookup n) >>= maybe err return
-  where err = error $ "Check: untyped variable encounted: " ++ name2String n
+  where err = error $ "Check: untyped variable encounted: " ++ n
 
-withType :: MonadReader Env m => Var -> Type -> m a -> m a
+withType :: MonadReader Env m => String -> Type -> m a -> m a
 withType n ty
   = local (Map.insert n ty)
 
-withTypes :: MonadReader Env m => [(Var, Type)] -> m a -> m a
+withTypes :: MonadReader Env m => [(String, Type)] -> m a -> m a
 withTypes ns = local (\env -> foldl f env ns)
   where f env (n, ty) = Map.insert n ty env 
 
@@ -42,51 +45,54 @@ inferModule modl = runFreshM (runReaderT m env)
   where env = makeEnv modl
         m = mapM inferDefn modl
 
-makeEnv :: [Defn] -> Map Var Type
-makeEnv = Map.fromList . concatMap f
-  where f = \case
-          FuncDefn (Func ty rbnd) ->
-            let (v, _) = unrebind rbnd
-            in [(v, ty)]
+makeEnv :: [Defn] -> Map String Type
+makeEnv defns = Map.fromList defns''
+  where defns' = concatMap f defns
+        defns'' = nubBy (\(n1,_) (n2, _) -> if n1 == n2 then err n1 else False) defns'
+        err n = error $ "Illegal duplicate definition: " ++ n
+        f = \case
+          FuncDefn (Func ty f bnd) -> [(f, ty)]
           
           ExternDefn (Extern n paramty retty) ->
-            [(s2n n, tarr paramty retty)]
+            [(n, tarr paramty retty)]
 
-          DataTypeDefn (DataType dt_n dt_cons) -> do
-            (con_n, con_params) <- dt_cons
-            let v = s2n con_n
-                ty = tarr (snd <$> con_params)
-                          (TCon dt_n)
-            return (v, ty)
+          DataTypeDefn (DataType dt_n dt_cons) ->
+            let mems = mconcat (snd <$> dt_cons)
+                mem_tys = [ (n, TArr (TCon dt_n) ty) | (Just n, ty) <- mems ]
+                con_tys = do
+                  (con_n, con_params) <- dt_cons
+                  let v = con_n
+                      ty = tarr (snd <$> con_params) (TCon dt_n)
+                  return (v, ty)
+            in mem_tys ++ con_tys
 
 
 inferDefn :: MonadInfer m => Defn -> m Defn
 inferDefn = \case
-  FuncDefn (Func ty rbnd) -> do
-    let (f, bnd) = unrebind rbnd
+  FuncDefn (Func ty f bnd) -> do
     (ps, body) <- unbind bnd
 
-    ps' <- mapM inferPat ps
-    body' <- infer body
+    let (argtys, retty) = splitType ty
+    ps' <- mapM (uncurry inferPat) (zip argtys ps)
+    let paramtys = concatMap patTypedVars ps' 
+    body' <- withTypes paramtys $ infer body
 
     let bnd' = bind ps' body'
-        rbnd' = rebind f bnd'
-
-    return $ FuncDefn $ Func ty rbnd'
+    return $ FuncDefn $ Func ty f bnd'
 
   defn -> return defn
 
 
 infer :: MonadInfer m => Exp -> m Exp
 infer = \case
-  e@(EVar v) -> EType e <$> lookupType v
+  e@(EVar v) -> EType e <$> lookupType (name2String v)
 
   EType e t -> do
     e' <- infer e
     case e' of
       EType _ t'
         | t /= t' -> error "Type mismatch!"
-        | True    -> return e
+        | True    -> return e'
 
       _ -> error "Type inference has mysteriously failed!"
 
@@ -94,57 +100,137 @@ infer = \case
     f' <- infer f
     xs' <- mapM infer xs
     let f_ty = exType f'
+        (paramtys, retty) = splitType f_ty
         x_tys = exType <$> xs'
-        ty = foldr TArr f_ty x_tys
-    return $ EType (EApp f' xs') ty
+    
+    if and (zipWith (==) x_tys paramtys)
+      then
+        return $ EType (EApp f' xs') retty
+      else error $ "type application mismatch\n\n"
+                ++ "expected: " ++ show paramtys ++ "\n\n"
+                ++ "actual: " ++ show x_tys ++ "\n\n"
 
   ELet bnd -> do
-    (letbnds, body) <- unbind bnd
-    let (ps, es) = unzip $ untelescope letbnds
-    ps' <- mapM inferPat ps
-    let ns = concatMap patTypedVars ps'
+    (unrec -> letbnds, body) <- unbind bnd
+    let qs = second unembed <$> letbnds
+        go (ns, qs) (p, e) = withTypes ns $ do
+          e' <- infer e
+          case e' of
+            EType _ ty -> do
+              p' <- inferPat ty p
+              let ns' = patTypedVars p'
+              return (ns' ++ ns, (p', e'):qs)
+            _ -> error "Inference: Expected typed expression in let equation"
+    (ns, qs') <- foldM go ([], []) qs
     withTypes ns $ do
-      es' <- mapM (infer . unembed) es
       body' <- infer body
-      let letbnds' = telescope (zip ps' (embed <$> es'))
+      let letbnds' = rec (second embed <$> qs')
       return $ EType (ELet $ bind letbnds' body')
                      (exType body')
 
-  ECon n args -> do
-    ty <- (snd . splitType) <$> lookupType (s2n n)
-    e' <- ECon n <$> mapM infer args
-    return $ EType e' ty
+  ECase e cls -> do
+    e' <- infer e
+    case e' of
+      EType _ ty -> do
+        cls' <- mapM (inferClause ty) cls
+        case cls' of
+          (Clause bnd):_ -> do
+            (cls_p, cls_body) <- unbind bnd
+            case cls_body of
+              EType _ cls_ty ->
+                return $ EType (ECase e' cls') cls_ty
+              _ -> error "Expected clause type!"
+          _ -> error "Empty case encountered!"
 
+      _ -> error "Expected typed expression!"
+  
   e@(EInt _) -> return $ EType e TI32
+  e@(EString _) -> return $ EType e TString
+
+  ECon n args -> do
+    (paramtys, retty) <- splitType <$> lookupType n
+    let argtys = zipWith EType args paramtys
+    e' <- ECon n <$> mapM infer argtys
+    return $ EType e' retty
 
   ENewCon n args -> do
-    ty <- (snd . splitType) <$> lookupType (s2n n)
-    e' <- ENewCon n <$> mapM infer args
-    return $ EType e' ty
+    (paramtys, retty) <- splitType <$> lookupType n
+    let argtys = zipWith EType args paramtys
+    e' <- ENewCon n <$> mapM infer argtys
+    return $ EType e' retty
 
   EFree e ->
     EType <$> (EFree <$> infer e) <*> pure TVoid
 
+  EDeref e -> do
+    e' <- infer e
+    case e' of
+      EType _ (TPtr ty) -> return $ EType (EDeref e') ty
+      _ -> error "Type check error: can't dereference a non-pointer"
 
-inferPat :: MonadInfer m => Pat -> m Pat
-inferPat = \case
-  PVar v -> return $ PVar v
+  ERef e -> do
+    e' <- infer e
+    case e' of
+      EType _ ty -> return $ EType (ERef e') (TPtr ty)
+      _ -> error "Type check error: can't dereference a non-pointer"
+
+  EMember e mem_n -> do
+    e' <- infer e
+    ty <- lookupType mem_n
+    let (argtys', retty') = splitType ty
+    case e' of
+      EType _ argty ->
+        case argtys' of
+          [argty'] 
+            | argty' == argty -> return $ EType (EMember e' mem_n) retty'
+            | otherwise -> error $ "Type mismatch!"
+          _ -> error $ "Expected member to only take one argument: " ++ mem_n
+      _ -> error "Expected typed expression"
+
+  EOp op -> inferOp op
+
+inferClause :: MonadInfer m => Type -> Clause -> m Clause
+inferClause ty (Clause bnd) = do
+  (p, e) <- unbind bnd
+  p' <- inferPat ty p
+  let ns = patTypedVars p'
+  withTypes ns $ do
+    e' <- infer e
+    let bnd' = bind p' e'
+    return $ Clause bnd'
+
+
+inferOp :: MonadInfer m => Op -> m Exp
+inferOp = \case
+  OpAddI a b -> do
+    op' <- OpAddI <$> infer (EType a TI32) <*> infer (EType b TI32)
+    return $ EType (EOp op') TI32
+
+  OpMulI a b -> do
+    op' <- OpMulI <$> infer (EType a TI32) <*> infer (EType b TI32)
+    return $ EType (EOp op') TI32
+
+
+inferPat :: MonadInfer m => Type -> Pat -> m Pat
+inferPat ty = \case
+  PVar v -> return $ PType (PVar v) ty
 
   PCon n ps -> do
-    ty <- lookupType (s2n n)
-    let retty = snd $ splitType ty 
-        argtys = fst $ splitType ty 
-    ps' <- mapM (\(p, t) -> inferPat (PType p t)) (zip ps argtys)
-    return $ PType (PCon n ps') retty
+    n_ty <- lookupType n
+    let (argtys, retty) = splitType n_ty
+    ps' <- mapM (\(p, ty') -> inferPat ty' p) (zip ps argtys)
+    if ty /= retty
+      then error $ "Pattern type mismatch"
+      else return $ PType (PCon n ps') retty
 
-  PWild -> return PWild
+  PWild -> return $ PType PWild ty
 
-  PType p t -> do
-    p' <- inferPat p
-    case p' of
-      PType _ t' ->
-        if t /= t'
-          then error $ "Patter type mismatch"
-          else return p'
-      _ -> error "Inference on patterns has mysteriously failed!"
-
+  PType p ty' 
+    | ty /= ty' -> do
+        env <- ask
+        error $ "\nPattern type mismatch:\n"
+            ++ "pattern: " ++ show p ++ "\n\n"
+            ++ "actual type: " ++ show ty ++ "\n\n"
+            ++ "expected type: " ++ show ty' ++ "\n\n"
+            ++ "env: " ++ show env ++ "\n\n"
+    | True -> inferPat ty' p

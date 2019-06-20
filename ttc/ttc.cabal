@@ -27,7 +27,9 @@ executable ttc
                        containers,
                        llvm-hs,
                        llvm-hs-pure,
-                       unbound-generics
+                       prettyprinter,
+                       unbound-generics,
+                       text
 
   hs-source-dirs:      app/
   default-language:    Haskell2010

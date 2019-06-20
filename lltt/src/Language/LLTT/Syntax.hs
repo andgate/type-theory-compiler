@@ -19,13 +19,17 @@ data Defn
   = FuncDefn Func
   | ExternDefn Extern
   | DataTypeDefn DataType
+  deriving(Show)
 
 data Func = Func String [Pat] Exp
+  deriving(Show)
 
 data Extern = Extern String [Type] Type
+  deriving(Show)
 
 data DataType =
   DataType String [(String, [(Maybe String, Type)])]
+  deriving(Show)
 
 data Exp
   = ECall Exp [Exp]
@@ -36,22 +40,26 @@ data Exp
   | EMatch Exp (NonEmpty (String, [Maybe String], Exp))
   | EOp Op
   | EType Exp Type
+  deriving(Show)
 
 data Pat
   = PVar String
   | PCon String [Pat]
   | PWild
   | PType Pat Type
+  deriving(Show)
 
 data Else
   = Else Exp
   | Elif Exp Exp Else
+  deriving(Show)
 
 data Val
   = VVar String
   | VInt Int
   | VString String
   | VArray [Exp]
+  deriving(Show)
 
 data Type
   = TCon String
@@ -62,6 +70,7 @@ data Type
   | TString
   | TVoid
   | TFunc Type [Type]
+  deriving(Show)
 
 data Op
   = IArithOp IArithOp
@@ -69,18 +78,22 @@ data Op
   | PtrOp PtrOp
   | MemOp MemOp
   | ArrayOp ArrayOp
+  deriving(Show)
 
 data IArithOp
   = AddOpI Exp Exp
   | SubOpI Exp Exp
   | MulOpI Exp Exp
+  deriving(Show)
 
 data FArithOp
   = AddOpF Exp Exp
   | SubOpF Exp Exp
   | MulOpF Exp Exp
+  deriving(Show)
 
 data Constr = Constr String [Exp]
+  deriving(Show)
 
 data MemOp
   = ConstrOp Constr    -- Stack allocation
@@ -89,19 +102,23 @@ data MemOp
   | MemAccessI Exp Exp
   | MemAccess Exp String  -- Memory access, can either be an integer or some member string
   | MemUpdate String Exp  -- Memory update
+  deriving(Show)
 
 data PtrOp
   = RefOp Exp
   | DerefOp Exp
+  deriving(Show)
 
 data ArrayOp
   = NewArrayOp Int Type
   | FreeArrayOp Exp
   | ResizeArrayOp String Int Type
   | AccessArrayOp String Int
+  deriving(Show)
 
 data StringOp
   = StrConstr String
+  deriving(Show)
 
 
 sizeDataType :: Map String Int -> DataType -> Int

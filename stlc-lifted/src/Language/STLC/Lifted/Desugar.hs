@@ -3,6 +3,7 @@
            , RankNTypes
            , ConstraintKinds
            , TupleSections
+           , ViewPatterns
            #-}
 module Language.STLC.Lifted.Desugar where
 
@@ -14,6 +15,8 @@ import Control.Monad
 import Data.Bifunctor
 import Data.Maybe
 import Data.List
+import Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NE
 import Data.Bitraversable
 
 import Unbound.Generics.LocallyNameless
@@ -45,23 +48,23 @@ desugarDataType (DataType n dt_cons)
   where dt_cons' = (second (second desugarType <$>)) <$> dt_cons      
 
 desugarFunc :: Fresh m => Func -> m LL.Func
-desugarFunc (Func ty rbnd) = do
-  let (fn_n, bnd) = unrebind rbnd
-      fn_n' = name2String fn_n
+desugarFunc (Func ty fn_n bnd) = do
   (ps, body) <- unbind bnd
   let ps' = desugarPat <$> ps
   body' <- desugarExp body
-  return $ LL.Func fn_n' ps' body'
+  return $ LL.Func fn_n ps' body'
 
 desugarExp  :: Fresh m => Exp -> m LL.Exp
-desugarExp (EType e ty) = desugarExp' ty e
-desugarExp _ = error "Expected typed expression!"
+desugarExp (EType e ty) = LL.EType <$> desugarExp' ty e <*> pure (desugarType ty)
+desugarExp e = error $ "desugarExp - Expected typed expression:\n\n" ++ show e ++ "\n\n"
 
 
 desugarExp'  :: Fresh m => Type -> Exp -> m LL.Exp
 desugarExp' ty = \case
   EVar n ->
     return $ LL.EVal . LL.VVar . name2String $ n
+
+  EType e ty' -> LL.EType <$> desugarExp' ty' e <*> pure (desugarType ty')
   
   EApp f xs -> do
     f' <- desugarExp f
@@ -69,29 +72,57 @@ desugarExp' ty = \case
     return $ LL.ECall f' xs'
   
   ELet bnd -> do
-    (rbnd, body) <- unbind bnd
-    let (ps, es) = unzip [(p, e) | (p, Embed e)<- untelescope rbnd]
-    case body of
-      EType _ body_ty -> do
-        let ps' = desugarPat <$> ps
-        es' <- mapM desugarExp es
-        body' <- desugarExp body
-        let rhs = zip ps' es'
-        return $ LL.ELet rhs body'
-      
-      _ -> error "desugar: unable to unbind let!"
+    (unrec -> letbnds, body) <- unbind bnd
+    let (ps, es) = unzip (second unembed <$> letbnds)
+    let ps' = desugarPat <$> ps
+    es' <- mapM desugarExp es
+    let rhs = zip ps' es'
+    body' <- desugarExp body
+    return $ LL.ELet rhs body'
 
+  ECase e@(EType _ TI32) cls -> do
+    error "Integer case not supported"
 
-  EType e ty -> return $ error "Unexpected type annotation encountered"
+  ECase e cls -> do
+    e' <- desugarExp e
+    cls' <- NE.fromList <$> mapM desugarClause cls
+    return $ LL.EMatch e' cls'
 
+  EInt i -> return $ LL.EVal $ LL.VInt i
+  EString str -> return $ LL.EVal $ LL.VString str
 
-desugarVal :: Exp -> Maybe (LL.Val)
-desugarVal = \case
-  EVar n -> Just . LL.VVar . name2String $ n
-  EApp _ _ -> Nothing
-  ELet _ -> Nothing
-  EType e _ -> desugarVal e
-  EInt i -> Just $ LL.VInt i
+  ECon n xs -> do
+    xs' <- mapM desugarExp xs
+    return $ LL.EOp $ LL.MemOp $ LL.ConstrOp $ LL.Constr n xs'
+
+  ENewCon n xs -> do
+    xs' <- mapM desugarExp xs
+    return $ LL.EOp $ LL.MemOp $ LL.NewOp $ LL.Constr n xs'
+
+  EFree e -> do
+    e' <- desugarExp e
+    return $ LL.EOp $ LL.MemOp $ LL.FreeOp e'
+
+  EDeref e -> do
+    e' <- desugarExp e
+    return $ LL.EOp $ LL.PtrOp $ LL.DerefOp e'
+
+  ERef e -> do
+    e' <- desugarExp e
+    return $ LL.EOp $ LL.PtrOp $ LL.RefOp e'
+
+  EMember e m -> do
+    e' <- desugarExp e
+    return $ LL.EOp $ LL.MemOp $ LL.MemAccess e' m
+
+  EOp op -> LL.EOp <$> desugarOp op
+
+  e -> error $ "unhandled case: " ++ show e
+
+desugarOp :: Fresh m => Op -> m LL.Op
+desugarOp = \case
+  OpAddI a b -> LL.IArithOp <$> (LL.AddOpI <$> desugarExp a <*> desugarExp b)
+  OpMulI a b -> LL.IArithOp <$> (LL.MulOpI <$> desugarExp a <*> desugarExp b)
 
 desugarType :: Type -> LL.Type
 desugarType = \case
@@ -114,3 +145,16 @@ desugarPat = \case
   PCon n ps  -> LL.PCon n (desugarPat <$> ps)
   PWild      -> LL.PWild
   PType p ty -> LL.PType (desugarPat p) (desugarType ty)
+
+
+desugarClause :: Fresh m => Clause -> m (String, [Maybe String], LL.Exp)
+desugarClause (Clause bnd) = do
+  (p, e) <- unbind bnd
+  let ns = (Just . fst) <$> patTypedVars p
+  case p of
+    PType (PCon n args) _ -> do
+      e' <- desugarExp e
+      return (n, ns, e')
+
+    p -> error $ "typed pattern expected, instead found:\n\n" ++ show p ++ "\n\n"
+
