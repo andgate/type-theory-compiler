@@ -7,11 +7,13 @@ import Language.LLTT.Syntax
 
 import Data.Text.Prettyprint.Doc
 
+import Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NE
+
 
 instance Pretty Module where
   pretty (Module n ds)
     = vsep (("module" <+> pretty n <> line):(pretty <$> ds))
-
 
 instance Pretty Defn where
   pretty = \case
@@ -65,7 +67,6 @@ instance Pretty DataType where
 
 instance Pretty Type where
   pretty = \case
-    TArr a b -> pretty a <+> "->" <+> pretty b
     TCon n -> pretty n
     TI8 -> "I8"
     TI32 -> "I32"
@@ -77,6 +78,9 @@ instance Pretty Type where
       | True       -> parens (pretty ty) <> "*"
     TString -> "String"
     TVoid -> "Void"
+    TFunc retty [] -> pretty retty
+    TFunc retty paramtys -> concatWith (\x y -> x <+> "->" <+> y)
+                                       (pretty <$> (paramtys ++ [retty]))
 
 
 instance Pretty Func where

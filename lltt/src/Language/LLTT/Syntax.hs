@@ -71,7 +71,7 @@ data Type
   | TPtr Type
   | TString
   | TVoid
-  | TFunc Type [Type]
+  | TFunc Type (NonEmpty Type)
   deriving(Show)
 
 data Op
