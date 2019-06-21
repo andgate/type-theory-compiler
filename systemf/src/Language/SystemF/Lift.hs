@@ -1,4 +1,4 @@
-module Language.SystemF.LambdaLift where
+module Language.SystemF.Lift where
 
 -- Lambda lifting finds nested function definitions,
 -- generates a name for them and lifts them out of a
@@ -6,3 +6,6 @@ module Language.SystemF.LambdaLift where
 -- by a pointer to their lifted version.
 
 -- This pass requires partial and cconv.
+
+lift :: Module -> Module
+lift = undefined

@@ -1,9 +1,5 @@
 packages: lltt/
           lltt-llvm/
-          lltt-frontend/
-          stlc-lifted/
-          stlc-lifted-frontend/
           stlc/
-          stlc-frontend/
           systemf/
           ttc/

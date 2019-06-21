@@ -3,7 +3,7 @@
            , LambdaCase
            , ViewPatterns
            #-}
-module Language.STLC.Lifted.Match where
+module Language.STLC.Match where
 
 -- Match generates simple patterns from nested patterns
 
@@ -12,7 +12,7 @@ import Control.Monad.Reader
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
-import Language.STLC.Lifted.Syntax
+import Language.STLC.Syntax
 
 import Unbound.Generics.LocallyNameless
 import Unbound.Generics.LocallyNameless.Name (name2String, s2n)
@@ -71,6 +71,7 @@ matchFunc (Func ty f bnd) = do
 matchExp :: MonadMatch m => Exp -> m Exp
 matchExp exp = case exp of
   EVar v -> return exp
+  ELit _ -> return exp
   EType e ty -> EType <$> matchExp e <*> pure ty
   EApp f xs -> EApp <$> matchExp f <*> (mapM matchExp xs)
 
@@ -82,29 +83,53 @@ matchExp exp = case exp of
     let bnd' = bind (rec qs') body'
     return $ ELet bnd'
 
+  EIf p t f ->
+    EIf <$> matchExp p <*> matchExp t <*> matchElse f
+
   ECase e@(EType _ ty) clauses -> do
     v <- fresh (s2n "match.e")
     e' <- matchExp e
     qs <- mapM (\(Clause bnd) -> unbind bnd) clauses
     es' <- mapM (matchExp . snd) qs
     let qs' = zip ((pure . fst) <$> qs) es'
-    body <- match [v] qs' (eapp "error" [EString "Default match"])
+    body <- match [v] qs' (eapp "error" [ELit $ LString "Default match"])
     return $ elet [(PType (PVar v) ty, e')] body
 
-  EInt i -> return exp
-  EString str -> return exp
+  ERef e -> ERef <$> matchExp e
+  EDeref e -> EDeref <$> matchExp e
+  
   ECon n xs -> ECon n <$> mapM matchExp xs
   ENewCon n xs -> ENewCon n <$> mapM matchExp xs
   EFree e -> EFree <$> matchExp e
-  EDeref e -> EDeref <$> matchExp e
-  ERef e -> ERef <$> matchExp e
-  EMember e mem_n -> EMember <$> matchExp e <*> pure mem_n
+  
+  EGet e mem_n -> EGet <$> matchExp e <*> pure mem_n
+  EGetI e i -> EGetI <$> matchExp e <*> matchExp i
+  ESet lhs rhs -> ESet <$> matchExp lhs <*> matchExp rhs
+  
+  ENewArray xs -> ENewArray <$> mapM matchExp xs
+  ENewArrayI i -> ENewArrayI <$> matchExp i
+  EResizeArray e i -> EResizeArray <$> matchExp e <*> matchExp i
+
+  ENewString _ -> return exp
+  ENewStringI i -> ENewStringI <$> matchExp i
+
   EOp op -> EOp <$> matchOp op
+
+matchElse :: MonadMatch m => Else -> m Else
+matchElse = \case
+  Elif p t f -> Elif <$> matchExp p <*> matchExp t <*> matchElse f
+  Else e -> Else <$> matchExp e
 
 matchOp :: MonadMatch m => Op -> m Op
 matchOp = \case
   OpAddI a b -> OpAddI <$> matchExp a <*> matchExp b
+  OpSubI a b -> OpSubI <$> matchExp a <*> matchExp b
   OpMulI a b -> OpMulI <$> matchExp a <*> matchExp b
+
+  OpAddF a b -> OpAddF <$> matchExp a <*> matchExp b
+  OpSubF a b -> OpSubF <$> matchExp a <*> matchExp b
+  OpMulF a b -> OpMulF <$> matchExp a <*> matchExp b
+
 
 arity :: MonadMatch m => String -> m Int
 arity c = reader (Map.lookup c . envArity) >>= maybe err return

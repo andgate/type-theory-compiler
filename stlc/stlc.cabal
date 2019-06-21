@@ -16,10 +16,24 @@ maintainer:          gabe4k@gmail.com
 extra-source-files:  CHANGELOG.md
 
 library
-  exposed-modules:     Language.STLC.Lift
+  exposed-modules:     Language.STLC.CConv
+                       Language.STLC.Desugar
+                       Language.STLC.Eval
+                       Language.STLC.Lex
+                       Language.STLC.Lift
+                       Language.STLC.Match
+                       Language.STLC.Namecheck
+                       Language.STLC.Parse
+                       Language.STLC.Partial
+                       Language.STLC.Pretty
                        Language.STLC.Syntax
   -- other-modules:
   -- other-extensions:
-  build-depends:       base ^>=4.12.0.0
+  build-depends:       lltt,
+                       base ^>=4.12.0.0,
+                       containers,
+                       mtl,
+                       prettyprinter,
+                       unbound-generics
   hs-source-dirs:      src
   default-language:    Haskell2010

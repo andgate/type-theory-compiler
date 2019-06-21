@@ -1,4 +1,4 @@
-module Language.STLC.Lifted.Eval where
+module Language.STLC.Eval where
 
 import Language.STLC.Syntax
 
@@ -7,7 +7,5 @@ import qualified Data.Map.Strict as Map
 
 type Env = Map String Exp
 
-type Val = Lit' Val
-
-eval :: Exp -> Either Exp Val
-eval = undefind
+eval :: Exp -> Either Exp Lit
+eval = undefined

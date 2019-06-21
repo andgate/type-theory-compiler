@@ -22,7 +22,7 @@ executable ttc
   -- other-extensions:
   build-depends:       lltt,
                        lltt-llvm,
-                       stlc-lifted,   
+                       stlc,   
                        base ^>=4.12.0.0,
                        containers,
                        llvm-hs,
@@ -36,7 +36,7 @@ executable ttc
 
 test-suite golden
    hs-source-dirs:      tests
-   main-is:             Main.hs
+   main-is:             Test.hs
    default-language:    Haskell2010
    type:                exitcode-stdio-1.0
    build-depends:       tcc,

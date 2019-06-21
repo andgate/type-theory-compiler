@@ -1,1 +1,0 @@
-module Language.STLC.Lifted.Parse where

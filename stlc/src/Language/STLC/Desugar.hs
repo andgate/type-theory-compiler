@@ -5,13 +5,13 @@
            , TupleSections
            , ViewPatterns
            #-}
-module Language.STLC.Lifted.Desugar where
+module Language.STLC.Desugar where
 
 
-import Language.STLC.Lifted.Syntax
+import Language.STLC.Syntax
 import qualified Language.LLTT.Syntax as LL
 
-import Language.STLC.Lifted.Eval
+import Language.STLC.Eval
 
 import Control.Monad
 import Data.Bifunctor

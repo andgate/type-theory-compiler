@@ -1,4 +1,4 @@
-module Main where
+module Test where
 
 import Test.Tasty (defaultMain, TestTree, testGroup)
 import Test.Tasty.Golden (goldenVsFile, findByExtension)

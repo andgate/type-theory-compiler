@@ -192,6 +192,10 @@ compileModule fp modl = do
   withFile (fp ++ ".stlc") WriteMode $ \h -> 
     hPutDoc h $ pretty stlc
 
+  let stlc = modl
+  withFile (fp ++ ".stlc") WriteMode $ \h -> 
+    hPutDoc h $ pretty stlc
+
   let stlc' = inferModule stlc
   withFile (fp ++ "-typed.stlc") WriteMode $ \h -> 
     hPutDoc h $ pretty stlc'

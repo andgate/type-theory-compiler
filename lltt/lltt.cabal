@@ -16,7 +16,11 @@ maintainer:          gabe4k@gmail.com
 extra-source-files:  CHANGELOG.md
 
 library
-  exposed-modules:     Language.LLTT.Pretty
+  exposed-modules:     Language.LLTT.Infer
+                       Language.LLTT.Lex
+                       Language.LLTT.Namecheck
+                       Language.LLTT.Parse
+                       Language.LLTT.Pretty
                        Language.LLTT.Syntax
   -- other-modules:
   -- other-extensions:

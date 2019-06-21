@@ -12,6 +12,10 @@ import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
 
 
+-----------------------------------------------------------------------
+-- Module and Definitions
+-----------------------------------------------------------------------
+
 instance Pretty Module where
   pretty (Module n ds)
     = vsep (("module" <+> pretty n <> line):(pretty <$> ds))
@@ -21,6 +25,38 @@ instance Pretty Defn where
     FuncDefn f -> pretty f <> line
     ExternDefn ex -> pretty ex <> line
     DataTypeDefn dt -> pretty dt <> line
+
+
+instance Pretty Func where
+  pretty (Func n ps body@(EType _ retty)) =
+    let ps' = do
+          p <- ps
+          let p' = pretty p
+          return $ if isAPat p then p' else parens p'
+        body' = pretty body
+        paramtys = [ty | PType _ ty <- ps]
+        ty = if null paramtys
+              then retty
+              else TFunc retty (NE.fromList [ty | PType _ ty <- ps])
+
+    in case ps' of
+      [] -> if isAExp body || isBExp body
+              then vsep [ pretty n <+> ":" <+> pretty ty
+                        , pretty n <+> "=" <+> body'
+                        ]
+              else vsep [ pretty n <+> ":" <+> pretty ty
+                        , pretty n <+> "="
+                        , indent 2 body'
+                        ]
+
+      _ -> if isAExp body || isBExp body
+              then vsep [ pretty n <+> ":" <+> pretty ty
+                        , pretty n <+> hsep ps' <+> "=" <+> body'
+                        ]
+              else vsep [ pretty n <+> ":" <+> pretty ty
+                        , pretty n <+> hsep ps'
+                        , indent 2 ("=" <+> align body')
+                        ]
 
 
 instance Pretty Extern where
@@ -64,56 +100,11 @@ instance Pretty DataType where
         if length (catMaybes (fst <$> args)) == 0
           then return $ "|" <+> pretty n <+> hsep args'
           else return $ "|" <+> pretty n <+> encloseSep lbrace rbrace comma args'
-        
-
-instance Pretty Type where
-  pretty = \case
-    TCon n -> pretty n
-    TI8 -> "I8"
-    TI32 -> "I32"
-    TArray i ty 
-      | isAType ty -> pretty ty <> brackets (pretty i)
-      | True       -> parens (pretty ty) <> brackets (pretty i)
-    TPtr ty 
-      | isAType ty -> pretty ty <> "*"
-      | True       -> parens (pretty ty) <> "*"
-    TString -> "String"
-    TVoid -> "Void"
-    TFunc retty paramtys ->
-      concatWith (\x y -> x <+> "->" <+> y)
-                 (pretty <$> (NE.toList paramtys ++ [retty]))
 
 
-instance Pretty Func where
-  pretty (Func n ps body@(EType _ retty)) =
-    let ps' = do
-          p <- ps
-          let p' = pretty p
-          return $ if isAPat p then p' else parens p'
-        body' = pretty body
-        paramtys = [ty | PType _ ty <- ps]
-        ty = if null paramtys
-              then retty
-              else TFunc retty (NE.fromList [ty | PType _ ty <- ps])
-
-    in case ps' of
-      [] -> if isAExp body || isBExp body
-              then vsep [ pretty n <+> ":" <+> pretty ty
-                        , pretty n <+> "=" <+> body'
-                        ]
-              else vsep [ pretty n <+> ":" <+> pretty ty
-                        , pretty n <+> "="
-                        , indent 2 body'
-                        ]
-
-      _ -> if isAExp body || isBExp body
-              then vsep [ pretty n <+> ":" <+> pretty ty
-                        , pretty n <+> hsep ps' <+> "=" <+> body'
-                        ]
-              else vsep [ pretty n <+> ":" <+> pretty ty
-                        , pretty n <+> hsep ps'
-                        , indent 2 ("=" <+> align body')
-                        ]
+-----------------------------------------------------------------------
+-- Expressions
+-----------------------------------------------------------------------
 
 instance Pretty Exp where
   pretty = \case
@@ -212,13 +203,13 @@ instance Pretty Exp where
 
 instance Pretty Lit where
   pretty = \case
-    LI32 i -> pretty i
-    LI8 i -> pretty i
+    LInt i -> pretty i
     LChar c -> squotes $ pretty c
     LString str -> dquotes $ pretty str
     LStringI i -> "String" <> brackets (pretty i)
     LArray xs -> pretty xs
     LArrayI i -> "Array" <> brackets (pretty i)
+
 
 instance Pretty Else where
   pretty = \case
@@ -227,6 +218,65 @@ instance Pretty Else where
                        , "then" <+> pretty t
                        , pretty f
                        ]
+
+
+instance Pretty Op where
+  pretty = \case
+    OpAddI a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["add", a', b']
+
+    OpSubI a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["sub", a', b']
+
+    OpMulI a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["mul", a', b']
+    
+    OpAddF a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["addf", a', b']
+
+    OpSubF a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["subf", a', b']
+
+    OpMulF a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["mulf", a', b']
+
+
+-----------------------------------------------------------------------
+-- Types
+-----------------------------------------------------------------------
+
+instance Pretty Type where
+  pretty = \case
+    TCon n -> pretty n
+    TI8 -> "I8"
+    TI32 -> "I32"
+    TArray i ty 
+      | isAType ty -> pretty ty <> brackets (pretty i)
+      | True       -> parens (pretty ty) <> brackets (pretty i)
+    TPtr ty 
+      | isAType ty -> pretty ty <> "*"
+      | True       -> parens (pretty ty) <> "*"
+    TString -> "String"
+    TVoid -> "Void"
+    TFunc retty paramtys ->
+      concatWith (\x y -> x <+> "->" <+> y)
+                 (pretty <$> (NE.toList paramtys ++ [retty]))
+ 
+-----------------------------------------------------------------------
+-- Patterns
+-----------------------------------------------------------------------     
 
 instance Pretty Pat where
   pretty = \case
@@ -266,39 +316,9 @@ instance Pretty Clause where
               , mempty
               ]
 
-
-instance Pretty Op where
-  pretty = \case
-    OpAddI a b ->
-      let a' = wrapBExp a
-          b' = wrapBExp b
-      in hsep ["add", a', b']
-
-    OpSubI a b ->
-      let a' = wrapBExp a
-          b' = wrapBExp b
-      in hsep ["sub", a', b']
-
-    OpMulI a b ->
-      let a' = wrapBExp a
-          b' = wrapBExp b
-      in hsep ["mul", a', b']
-    
-    OpAddF a b ->
-      let a' = wrapBExp a
-          b' = wrapBExp b
-      in hsep ["addf", a', b']
-
-    OpSubF a b ->
-      let a' = wrapBExp a
-          b' = wrapBExp b
-      in hsep ["subf", a', b']
-
-    OpMulF a b ->
-      let a' = wrapBExp a
-          b' = wrapBExp b
-      in hsep ["mulf", a', b']
-      
+-----------------------------------------------------------------------
+-- Helpers
+-----------------------------------------------------------------------
 
 wrapBExp :: Exp -> Doc ann
 wrapBExp e 
@@ -336,6 +356,8 @@ isBExp = \case
 
   ENewString _ -> True
   ENewStringI _ -> True
+
+  EOp _ -> True
 
 isAExp :: Exp -> Bool
 isAExp = \case

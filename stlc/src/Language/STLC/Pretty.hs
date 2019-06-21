@@ -2,9 +2,9 @@
            , OverloadedStrings
            , FlexibleInstances
            #-}
-module Language.STLC.Lifted.Pretty where
+module Language.STLC.Pretty where
 
-import Language.STLC.Lifted.Syntax
+import Language.STLC.Syntax
 
 import Unbound.Generics.LocallyNameless
 import Unbound.Generics.LocallyNameless.Name
@@ -124,6 +124,8 @@ instance PrettyFresh Exp where
   prettyFresh = \case
     EVar n -> return $ pretty (name2String n)
 
+    ELit l -> prettyFresh l
+
     EType e ty -> do
       e' <- prettyFresh e
       let ty' = pretty ty
@@ -147,7 +149,15 @@ instance PrettyFresh Exp where
       return $ vsep [ "let" <+> align (vsep qs')
                     , "in" <+> e'
                     ]
-      
+    
+    EIf p t f -> do
+      p' <- prettyFresh p
+      t' <- prettyFresh t
+      f' <- prettyFresh f
+      return $ vsep [ "if" <+> p'
+                    , indent 2 ("then" <+> t')
+                    , indent 2 f'
+                    ]
 
     ECase e cls -> do
       e' <- prettyFresh e
@@ -155,9 +165,17 @@ instance PrettyFresh Exp where
       return $ vsep $ [ "case" <+> e' <+> "of"
                       , indent 2 (vsep cls')]
     
+    ERef e -> do
+      e' <- prettyFresh e
+      if isAExp e
+        then return $ "*" <> e'
+        else return $ "*" <> parens e'
 
-    EInt i -> return $ pretty i
-    EString str -> return $ dquotes (pretty str)
+    EDeref e -> do
+      e' <- prettyFresh e
+      if isAExp e
+        then return $ "&" <> e'
+        else return $ "&" <> parens e'
     
     ECon n [] ->
       return $ pretty n
@@ -177,27 +195,75 @@ instance PrettyFresh Exp where
       e' <- prettyFresh e
       return $ "free" <+> e'
 
-    EDeref e -> do
-      e' <- prettyFresh e
-      if isAExp e
-        then return $ "&" <> e'
-        else return $ "&" <> parens e'
+    EGet e m -> do
+      e' <- wrapBExpFresh e
+      return $ e' <> "." <> pretty m
 
-    ERef e -> do
-      e' <- prettyFresh e
-      if isAExp e
-        then return $ "*" <> e'
-        else return $ "*" <> parens e'
 
-    EMember e m -> do
-      e' <- prettyFresh e
-      if isAExp e
-        then
-          return $ e' <> "." <> pretty m
-        else
-          return $ parens e' <> "." <> pretty m
+    EGetI e i -> do
+      e' <- wrapBExpFresh e
+      i' <- prettyFresh i
+      return $ e' <> brackets i'
+
+    ESet rhs lhs -> do
+      lhs' <- prettyFresh lhs
+      rhs' <- prettyFresh rhs
+      return $ lhs' <+> "<-" <> rhs'
+
+    ENewArray xs -> do
+      xs' <- mapM prettyFresh xs
+      return $ "new" <+> list xs'
+
+    ENewArrayI i -> do
+      i' <- prettyFresh i
+      return $ "new" <+> "Array" <> brackets i'
+    
+    EResizeArray e i -> do
+      e' <- wrapBExpFresh e
+      i' <- prettyFresh e
+      return $ "resize" <+> e' <> brackets i'
+
+    ENewString str ->
+      return $ "new" <+> dquotes (pretty str)
+
+    ENewStringI i -> do
+      i' <- prettyFresh i
+      return $ "new" <+> "String" <> brackets i'
 
     EOp op -> prettyFresh op
+
+
+instance PrettyFresh Lit where
+  prettyFresh = \case
+    LInt i -> return $ pretty i
+    LChar c -> return $ squotes $ pretty c
+    LString s -> return $ dquotes $ pretty s
+    LStringI i -> do 
+      i' <- prettyFresh i
+      return $ "String" <> brackets i'
+
+    LArray es -> do
+      es' <- mapM prettyFresh es
+      return $ list es'
+
+    LArrayI i -> do
+      i' <- prettyFresh i
+      return $ "Array" <> brackets i'
+
+instance PrettyFresh Else where
+  prettyFresh = \case
+    Elif p t f -> do
+      p' <- prettyFresh p
+      t' <- prettyFresh t
+      f' <- prettyFresh f
+      return $ vsep [ "elif" <+> p'
+                    , "then" <+> t'
+                    , f'
+                    ]
+
+    Else body -> do
+      body' <- prettyFresh body
+      return $ "else" <+> body'
 
 instance Pretty Pat where
   pretty = \case
@@ -241,7 +307,11 @@ instance PrettyFresh Op where
       a' <- wrapBExpFresh a
       b' <- wrapBExpFresh b
       return $ hsep ["mul", a', b']
-      
+
+
+-----------------------------------------------------------------------
+-- Helpers
+-----------------------------------------------------------------------
 
 wrapBExpFresh :: Fresh m => Exp -> m (Doc ann)
 wrapBExpFresh e 
@@ -252,37 +322,63 @@ wrapBExpFresh e
 isBExp :: Exp -> Bool
 isBExp = \case
   EVar _ -> False
+  ELit _ -> False
   EType _ _ -> False
   EApp _ _ -> True
   ELet _ -> False
+  EIf _ _ _ -> False
   ECase _ _ -> False
-  EInt _ -> False
-  EString _ -> False
+
+  ERef _ -> False
+  EDeref _ -> False
+  
   ECon _ [] -> False
   ECon _ _ -> True
   ENewCon _ _ -> True
   EFree e -> True
-  EDeref _ -> False
-  ERef _ -> False
-  EMember e _ -> False
+  
+  EGet _ _ -> False
+  EGetI _ _ -> False
+  ESet _ _ -> True
+
+  ENewArray _ -> True
+  ENewArrayI _ -> True
+  EResizeArray _ _ -> True
+
+  ENewString _ -> True
+  ENewStringI _ -> True
+
   EOp _ -> True
 
 isAExp :: Exp -> Bool
 isAExp = \case
   EVar _ -> True
+  ELit _ -> True
   EType _ _ -> False
   EApp _ _ -> False
   ELet _ -> False
+  EIf _ _ _ -> False
   ECase _ _ -> False
-  EInt _ -> True
-  EString _ -> True
+
+  ERef _ -> True
+  EDeref _ -> True
+  
   ECon _ [] -> True
   ECon _ _ -> False
   ENewCon _ _ -> False
   EFree e -> False
-  EDeref _ -> True
-  ERef _ -> True
-  EMember e _ -> isAExp e 
+  
+  EGet e _ -> isAExp e
+  EGetI e _ -> isAExp e
+  ESet _ _ -> False
+
+  ENewArray _ -> False
+  ENewArrayI _ -> False
+  EResizeArray _ _ -> False
+
+  ENewString _ -> False
+  ENewStringI _ -> False
+  
   EOp _ -> False
 
 isAType :: Type -> Bool

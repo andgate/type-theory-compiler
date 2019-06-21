@@ -1,10 +1,18 @@
+module Language.LLTT.Infer where
+
+import Language.LLTT.Syntax
 {-# LANGUAGE LambdaCase
            , ConstraintKinds
            , FlexibleContexts
+           , FlexibleInstances
+           , MultiParamTypeClasses
            , ViewPatterns
+           , DeriveGeneric
+           , DeriveDataTypeable
+           , TypeSynonymInstances
           #-}
-module Language.STLC.Lifted.Infer where
 
+{-
 -- Type Inference
 --   Type inference will enrich the ast with type annotations.
 -- While this language is intended to be the target of a
@@ -17,15 +25,29 @@ import Control.Monad.Reader
 
 import Data.Bifunctor
 import Data.List
+
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
+import Data.Typeable (Typeable)
+import GHC.Generics (Generic)
 import Unbound.Generics.LocallyNameless
 
+
+-----------------------------------------------------------------
+-- Environment and Inference Monad
+-----------------------------------------------------------------
+
+type Substitution = (PolyType, PolyType)
+type Substitutions = [Substitution]
+type Constraint   = (PolyType, PolyType)
+type Constraints = [Constraint]
 
 type Env = Map String Type
 type Infer = ReaderT Env FreshM
 type MonadInfer m = (MonadReader Env m, Fresh m)
+
+-- helpers
 
 lookupType :: MonadReader Env m => String -> m Type
 lookupType n
@@ -69,6 +91,80 @@ makeEnv defns = Map.fromList defns''
             in mem_tys ++ con_tys
 
 
+-----------------------------------------------------------
+-- Algorithm W
+--   This algorithm does type inference in three phases:
+--      1) Constraint gathering, temporary type variable instantiation
+--      2) Unification, turning constraints into substitutions
+--      3) Inference, apply substitutions and
+--         convert back to a monotype.
+-----------------------------------------------------------
+
+-----------------------------------------------------------
+-- Constraint Gathering
+-----------------------------------------------------------
+
+
+constraints :: Fresh m => Exp -> m (PolyExp, Constraints)
+constraints = \case
+  EVar v -> do
+    ty <- lookupType (name2String v)
+    return (EType (EVar v) ty, [])
+
+  ELit l -> do
+    ty <- typeOfLit
+    return $ (EType (ELit l) ty, [])
+
+  EType e ty -> do
+    (e'@(EType _ ty'), cs) <- constraints e
+    return (e', (ty, ty'):cs)
+
+  EApp f xs -> do
+    (f, cs1) <- constraints f
+    (xs', css) <- unzip <$> mapM constraints xs
+    let cs2 = mconcat css
+        (paramtys, retty) = splitType $ exType f
+        paramtys' = exType <$> xs'
+        cs3 = zip paramtys paramtys'
+        e' = EType (EApp f' xs') retty 
+    return (e', cs1 <> cs2 <> cs3)
+
+  ELet _ -> undefined
+  EIf _ _ _ -> undefined
+  ECase _ _ -> undefined
+
+  ERef _ -> undefined
+  EDeref _ -> undefined
+  
+  ECon _ [] -> undefined
+  ECon _ _ -> undefined
+  ENewCon _ _ -> undefined
+  EFree e -> undefined
+  
+  EGet e _ -> isAExp e
+  EGetI e _ -> isAExp e
+  ESet _ _ -> undefined
+
+  ENewArray _ -> undefined
+  ENewArrayI _ -> undefined
+  EResizeArray _ _ -> undefined
+
+  ENewString _ -> undefined
+  ENewStringI _ -> undefined
+  
+  EOp _ -> undefined
+
+
+typeOfLit :: Fresh m => Lit -> m Type
+typeOfLit = \case
+  LInt _ -> newTVar
+  LChar _ -> return TChar
+  LString _ -> return TString
+  LStringI _ -> return TString
+  LArray _ -> newTVar
+  LArrayI _ -> newTVar
+
+
 inferDefn :: MonadInfer m => Defn -> m Defn
 inferDefn = \case
   FuncDefn (Func ty f bnd) -> do
@@ -89,6 +185,8 @@ infer :: MonadInfer m => Exp -> m Exp
 infer = \case
   e@(EVar v) -> EType e <$> lookupType (name2String v)
 
+  ELit l -> undefined
+
   EType e t -> do
     e' <- infer e
     case e' of
@@ -108,7 +206,7 @@ infer = \case
     if and (zipWith (==) x_tys paramtys)
       then
         return $ EType (EApp f' xs') retty
-      else error $ "type application mismatch\n\n"
+      else error $ "tcabalype application mismatch\n\n"
                 ++ "expected: " ++ show paramtys ++ "\n\n"
                 ++ "actual: " ++ show x_tys ++ "\n\n"
 
@@ -145,9 +243,6 @@ infer = \case
           _ -> error "Empty case encountered!"
 
       _ -> error "Expected typed expression!"
-  
-  e@(EInt _) -> return $ EType e TI32
-  e@(EString _) -> return $ EType e TString
 
   ECon n args -> do
     (paramtys, retty) <- splitType <$> lookupType n
@@ -176,7 +271,7 @@ infer = \case
       EType _ ty -> return $ EType (ERef e') (TPtr ty)
       _ -> error "Type check error: can't dereference a non-pointer"
 
-  EMember e mem_n -> do
+  EGet e mem_n -> do
     e' <- infer e
     ty <- lookupType mem_n
     let (argtys', retty') = splitType ty
@@ -184,7 +279,7 @@ infer = \case
       EType _ argty ->
         case argtys' of
           [argty'] 
-            | argty' == argty -> return $ EType (EMember e' mem_n) retty'
+            | argty' == argty -> return $ EType (EGet e' mem_n) retty'
             | otherwise -> error $ "Type mismatch!"
           _ -> error $ "Expected member to only take one argument: " ++ mem_n
       _ -> error "Expected typed expression"
@@ -236,49 +331,17 @@ inferPat ty = \case
             ++ "expected type: " ++ show ty' ++ "\n\n"
             ++ "env: " ++ show env ++ "\n\n"
     | True -> inferPat ty' p
-
-
-
-import Language.STLC.Syntax
-
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
-
-type PolyExp = Exp' PolyType
-type PolyType = Type' Poly
-
-type Substitution = (PolyType, PolyType)
-type Substitutions = [Substitution]
-type Constraint   = (PolyType, PolyType)
-type Constraints = [Constraint]
-
------------------------------------------------------------
--- Algorithm W
---   This algorithm does type inference in three phases:
---      1) Constraint gathering, temporary type variable instantiation
---      2) Unification, turning constraints into substitutions
---      3) Inference, apply substitutions and
---         convert back to a monotype.
------------------------------------------------------------
-
------------------------------------------------------------
--- Constraint Gathering
------------------------------------------------------------
-
-constraints :: Fresh m => Exp -> m (PolyExp, Constraints)
-constraints = undefined
-
-
+-}
 -----------------------------------------------------------
 -- Unification
 -----------------------------------------------------------
 
-unify :: Constraints -> Substitutions
-unify = undefined
+--unify :: Constraints -> Substitutions
+--unify = undefined
 
 
 -----------------------------------------------------------
 -- Inference
 -----------------------------------------------------------
 
-infer :: Substitutions -> PolyExp -> Exp
+--infer :: Substitutions -> PolyExp -> Exp

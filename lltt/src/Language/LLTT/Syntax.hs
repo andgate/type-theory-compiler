@@ -50,6 +50,7 @@ sizeType sizes = \case
   TCon n -> case Map.lookup n sizes of
     Nothing -> error "DataType not registered"
     Just i -> i
+  TVar _ -> 8
   TI8 -> 1
   TI32 -> 4
   TArray n ty -> n + sizeType sizes ty
@@ -80,7 +81,7 @@ data Exp
   | EFree Exp
 
   | EGet Exp String
-  | EGetI Exp Int
+  | EGetI Exp Exp
   | ESet Exp Exp
 
   | ENewArray [Exp]
@@ -96,13 +97,13 @@ data Exp
 
 -- Literals
 data Lit
-  = LI32 Int
-  | LI8 Int
+  = LInt Int
   | LChar Char
   | LString String
   | LStringI Int
   | LArray [Exp]
   | LArrayI Int
+  | LGetI Exp Int
   deriving(Show)
 
   -- If Branches
@@ -127,7 +128,8 @@ data Op
 ---------------------------------------------------------------------------
 
 data Type
-  = TCon String
+  = TVar String
+  | TCon String
   | TI8
   | TI32
   | TChar

@@ -1,1 +1,0 @@
-module Language.STLC.Frontend.Namecheck where

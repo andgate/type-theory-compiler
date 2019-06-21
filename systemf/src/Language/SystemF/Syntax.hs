@@ -56,10 +56,46 @@ data Pat
   | PType Pat Type
   deriving (Show, Generic, Typeable)
 
+-----------------------------------------------------------------
+-- Types
+-----------------------------------------------------------------
 
+
+type TVar = Name Type
 data Type
-  = TVar String
-  | TI32
+  = TUnit
+  | TVar TVar
+  | TArr PolyType PolyType
   | TCon String
-  | TArr Type Type
+  | TI8
+  | TI32
+  | TChar
+  | TArray Int PolyType 
+  | TPtr PolyType
+  | TString
+  | TVoid
   deriving (Show, Generic, Typeable)
+
+
+instance Alpha Type
+instance Alpha Exp
+instance Alpha Lit
+instance Alpha Else
+instance Alpha Pat
+instance Alpha Clause
+instance Alpha Op
+
+instance Subst Type Op
+instance Subst Type Clause
+instance Subst Type Pat
+instance Subst Type Else
+instance Subst Type Lit
+instance Subst Type Exp
+instance Subst Type Type where
+  isvar (TVar v) = Just (SubstName v)
+  isvar _  = Nothing
+
+
+newTVar :: Fresh m => m Type
+newTVar =
+  TVar <$> fresh (s2n "x")
