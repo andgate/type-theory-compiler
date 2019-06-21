@@ -1,0 +1,4 @@
+module Main
+
+main : I32 -> **I8 -> I32
+main argc argv = 0

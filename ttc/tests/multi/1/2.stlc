@@ -1,0 +1,4 @@
+module B
+
+foo : I32 -> I32 -> I32
+foo a b = add a b
