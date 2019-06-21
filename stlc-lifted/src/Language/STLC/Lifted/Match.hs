@@ -27,9 +27,11 @@ data Env = Env { envArity   :: Map Constr Int
 type MonadMatch m = (MonadReader Env m, Fresh m)
 
 
-matchModule :: [Defn] -> [Defn]
-matchModule modl = runFreshM $ runReaderT (mapM matchDefn modl) env
-  where env = makeEnv modl
+matchModule :: Module -> Module
+matchModule (Module n defns)
+  = Module n defns'
+  where env = makeEnv defns
+        defns' = runFreshM $ runReaderT (mapM matchDefn defns) env
 
 
 makeEnv :: [Defn] -> Env

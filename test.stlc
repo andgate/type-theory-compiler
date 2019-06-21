@@ -1,0 +1,95 @@
+module Test
+
+extern malloc : I32 -> I8*
+
+extern free : I8* -> Void
+
+extern memcpy : I8* -> I8* -> I32 -> I8*
+
+extern puts : String -> I32
+
+derefInt : I32* -> I32
+derefInt (a : I32*) = &a
+
+type MaybeInt
+  = Nothing 
+  | Just I32
+
+type IVector3
+  = V3 {x : I32,y : I32,z : I32}
+
+nothing : MaybeInt
+nothing = Nothing
+
+just5 : MaybeInt*
+just5 = new Just 5
+
+dot : IVector3 -> IVector3 -> I32
+dot (v1 : IVector3) (v2 : IVector3)
+  = let x1 = v1.x
+        y1 = v1.y
+        z1 = v1.z
+        x2 = v2.x
+        y2 = v2.y
+        z2 = v2.z
+        a1 = mul x1 x2
+        a2 = mul y1 y2
+        a3 = mul z1 z2
+        a4 = add a1 a2
+        a5 = add a3 a4
+    in a5
+
+exMaybe : MaybeInt -> I32
+exMaybe (may_x : MaybeInt)
+  = case may_x of
+      Just x -> x
+      Nothing -> 0
+
+add : I32 -> I32 -> I32
+add (a : I32) (b : I32) = add a b
+
+mul : I32 -> I32 -> I32
+mul (a : I32) (b : I32) = mul a b
+
+const : I32 -> I32 -> I32
+const (a : I32) (b : I32) = a
+
+id : I32 -> I32
+id (x : I32) = x
+
+idMaybe : MaybeInt -> MaybeInt
+idMaybe (x : MaybeInt) = x
+
+addMul : I32 -> I32 -> I32 -> I32
+addMul (a : I32) (b : I32) (c : I32)
+  = let d = add a b
+        e = mul d c
+    in id e
+
+maybeAddMul : MaybeInt -> MaybeInt -> MaybeInt -> MaybeInt
+maybeAddMul (may_a : MaybeInt) (may_b : MaybeInt) (may_c : MaybeInt)
+  = case may_a of
+      Nothing -> Nothing
+      Just a ->
+        case may_b of
+          Nothing -> Nothing
+          Just b ->
+            case may_c of
+              Nothing -> Nothing
+              Just c ->
+                let d = addMul a b c
+                in Just d
+              
+          
+      
+
+main : I32 -> I8** -> I32
+main argc argv
+  = let hello = "Hello World"
+        five = "5"
+        may_5_ptr = just5
+        may_5 = &may_5_ptr
+        may_not = nothing
+    in case may_5 of
+      Nothing -> puts hello
+      Just c -> puts five

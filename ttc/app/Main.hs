@@ -148,8 +148,7 @@ maybeAddMulFunc = FuncDefn $ func "maybeAddMul"
 
 mainFunc = FuncDefn $ func "main"
                            (tarr [TI32, TPtr (TPtr TI8)] TI32)
-                           [ PType (pvar "argc") TI32
-                           , PType (pvar "argv") (TPtr (TPtr TI8)) ]
+                           [ pvar "argc", pvar "argv" ]
                            body 
   where body = elet [ (pvar "hello", EString "Hello World")
                     , (pvar "five", EString "5")
@@ -162,30 +161,32 @@ mainFunc = FuncDefn $ func "main"
                       , (PCon "Just" [pvar "c"], eapp "puts" [evar "five"])       
                       ]
 
-testSource :: [Defn]
-testSource = [ mallocExtern
-             , freeExtern
-             , memcpyExtern
-             , putsExtern
-             , derefIntFunc
-             , maybeIntType
-             , iVector3Type
-             , nothingFunc
-             , just5Func
-             , dotFunc
-             , exMaybeFunc
-             , addFunc
-             , mulFunc
-             , constFunc
-             , idFunc
-             , idMaybeFunc
-             , addMulFunc
-             , maybeAddMulFunc
-             , mainFunc
-             ]
+testSource :: Module
+testSource 
+  = Module  "Test"
+            [ mallocExtern
+            , freeExtern
+            , memcpyExtern
+            , putsExtern
+            , derefIntFunc
+            , maybeIntType
+            , iVector3Type
+            , nothingFunc
+            , just5Func
+            , dotFunc
+            , exMaybeFunc
+            , addFunc
+            , mulFunc
+            , constFunc
+            , idFunc
+            , idMaybeFunc
+            , addMulFunc
+            , maybeAddMulFunc
+            , mainFunc
+            ]
 
 
-compileModule :: FilePath -> [Defn] -> IO ()
+compileModule :: FilePath -> Module -> IO ()
 compileModule fp modl = do
   let stlc = modl
   withFile (fp ++ ".stlc") WriteMode $ \h -> 
@@ -200,11 +201,20 @@ compileModule fp modl = do
     hPutDoc h $ pretty stlc''
 
   let lltc = desugarModule stlc''
-  withFile (fp ++ ".lltc") WriteMode $ \h -> 
+  withFile (fp ++ ".lltt") WriteMode $ \h -> 
     hPutDoc h $ pretty lltc
 
   let llvmir = genModule envEmpty lltc
   LLVM.withContext $ \c -> LLVM.withModuleFromAST c llvmir (LLVM.writeLLVMAssemblyToFile (LLVM.File (fp ++ ".ll")))
 
+
+-- TODO!
+-- Make this read files using optApplicative.
+-- Build Env from files and flags, then
+-- compile with Env.
+-- Have options for printing different phases
+-- and stuff.
+-- This requires parsing. Once this is done,
+-- we can do golden testing.
 main :: IO ()
 main = compileModule "test" testSource

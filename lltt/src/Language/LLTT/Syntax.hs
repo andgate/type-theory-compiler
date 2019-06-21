@@ -15,6 +15,8 @@ import qualified Data.Map.Strict as Map
 --             , No Nested Applications
 --             , Single-level Pattern matching
 
+data Module = Module String [Defn]
+
 data Defn
   = FuncDefn Func
   | ExternDefn Extern

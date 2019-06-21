@@ -1,0 +1,122 @@
+module Test
+
+extern malloc : I32 -> I8*
+
+extern free : I8* -> Void
+
+extern memcpy : I8* -> I8* -> I32 -> I8*
+
+extern puts : String -> I32
+
+derefInt : I32* -> I32
+derefInt (a : I32*)
+  = &(a : I32*) : I32
+
+type MaybeInt
+  = Nothing 
+  | Just I32
+
+type IVector3
+  = V3 {x : I32,y : I32,z : I32}
+
+nothing : MaybeInt
+nothing =
+  Nothing : MaybeInt
+
+just5 : MaybeInt*
+just5 =
+  new Just 5 : I32 : MaybeInt
+
+dot : IVector3 -> IVector3 -> I32
+dot (v1 : IVector3) (v2 : IVector3)
+  = (let a5 : I32 = add (a3 : I32) (a4 : I32) : I32
+         a4 : I32 = add (a1 : I32) (a2 : I32) : I32
+         a3 : I32 = mul (z1 : I32) (z2 : I32) : I32
+         a2 : I32 = mul (y1 : I32) (y2 : I32) : I32
+         a1 : I32 = mul (x1 : I32) (x2 : I32) : I32
+         z2 : I32 = ((v2 : IVector3).z) : I32
+         y2 : I32 = ((v2 : IVector3).y) : I32
+         x2 : I32 = ((v2 : IVector3).x) : I32
+         z1 : I32 = ((v1 : IVector3).z) : I32
+         y1 : I32 = ((v1 : IVector3).y) : I32
+         x1 : I32 = ((v1 : IVector3).x) : I32
+    in a5 : I32) : I32
+
+exMaybe : MaybeInt -> I32
+exMaybe (may_x : MaybeInt)
+  = (let match.e : MaybeInt = may_x : MaybeInt
+    in (case match.e : MaybeInt of
+      (Nothing : MaybeInt) ->
+        0 : I32
+      
+      (Just (match.x : MaybeInt) : MaybeInt) ->
+        match.x : I32
+      ) : I32) : I32
+
+add : I32 -> I32 -> I32
+add (a : I32) (b : I32)
+  = add (a : I32) (b : I32) : I32
+
+mul : I32 -> I32 -> I32
+mul (a : I32) (b : I32)
+  = mul (a : I32) (b : I32) : I32
+
+const : I32 -> I32 -> I32
+const (a : I32) (b : I32)
+  = a : I32
+
+id : I32 -> I32
+id (x : I32)
+  = x : I32
+
+idMaybe : MaybeInt -> MaybeInt
+idMaybe (x : MaybeInt)
+  = x : MaybeInt
+
+addMul : I32 -> I32 -> I32 -> I32
+addMul (a : I32) (b : I32) (c : I32)
+  = (let e : I32 = (mul : I32 -> I32 -> I32) (d : I32) (c : I32) : I32
+         d : I32 = (add : I32 -> I32 -> I32) (a : I32) (b : I32) : I32
+    in (id : I32 -> I32) (e : I32) : I32) : I32
+
+maybeAddMul : MaybeInt -> MaybeInt -> MaybeInt -> MaybeInt
+maybeAddMul (may_a : MaybeInt) (may_b : MaybeInt) (may_c : MaybeInt)
+  = (let match.e : MaybeInt = may_a : MaybeInt
+    in (case match.e : MaybeInt of
+      (Nothing : MaybeInt) ->
+        Nothing : MaybeInt
+      
+      (Just (match.x : MaybeInt) : MaybeInt) ->
+        (let match.e : MaybeInt = may_b : MaybeInt
+        in (case match.e : MaybeInt of
+          (Nothing : MaybeInt) ->
+            Nothing : MaybeInt
+          
+          (Just (match.x : MaybeInt) : MaybeInt) ->
+            (let match.e : MaybeInt = may_c : MaybeInt
+            in (case match.e : MaybeInt of
+              (Nothing : MaybeInt) ->
+                Nothing : MaybeInt
+              
+              (Just (match.x : MaybeInt) : MaybeInt) ->
+                (let d : I32 = (addMul : I32 -> I32 -> I32 -> I32) (match.x : I32) (match.x : I32) (match.x : I32) : I32
+                in Just d : I32 : MaybeInt) : MaybeInt
+              ) : MaybeInt) : MaybeInt
+          ) : MaybeInt) : MaybeInt
+      ) : MaybeInt) : MaybeInt
+
+main : I32 -> I8** -> I32
+main (argc : I32) (argv : I8**)
+  = (let may_not : MaybeInt = nothing : MaybeInt
+         may_5 : MaybeInt = &(may_5_ptr : MaybeInt*) : MaybeInt
+         may_5_ptr : MaybeInt* = just5 : MaybeInt*
+         five : String = "5" : String
+         hello : String = "Hello World" : String
+    in (let match.e : MaybeInt = may_5 : MaybeInt
+    in (case match.e : MaybeInt of
+      (Nothing : MaybeInt) ->
+        (puts : String -> I32) (hello : String) : I32
+      
+      (Just (match.x : MaybeInt) : MaybeInt) ->
+        (puts : String -> I32) (five : String) : I32
+      ) : I32) : I32) : I32

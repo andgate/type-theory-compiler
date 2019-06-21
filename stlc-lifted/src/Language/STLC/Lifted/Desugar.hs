@@ -28,8 +28,9 @@ import Unbound.Generics.LocallyNameless.Name (name2String, s2n)
 -- This is a form of the STLC which can be easily
 -- translated into LLVM IR.
 
-desugarModule :: [Defn] -> [LL.Defn]
-desugarModule = runFreshM . mapM desugarDefn
+desugarModule :: Module -> LL.Module
+desugarModule (Module n defns)
+  = LL.Module n $ runFreshM $ mapM desugarDefn defns
 
 
 desugarDefn :: Fresh m => Defn -> m LL.Defn

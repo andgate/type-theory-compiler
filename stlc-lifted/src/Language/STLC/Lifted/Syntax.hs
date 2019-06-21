@@ -21,6 +21,8 @@ import Unbound.Generics.LocallyNameless
 
 type Var = Name Exp
 
+data Module = Module String [Defn]
+
 data Defn
   = FuncDefn Func
   | ExternDefn Extern

@@ -33,3 +33,14 @@ executable ttc
 
   hs-source-dirs:      app/
   default-language:    Haskell2010
+
+test-suite golden
+   hs-source-dirs:      tests
+   main-is:             Main.hs
+   default-language:    Haskell2010
+   type:                exitcode-stdio-1.0
+   build-depends:       tcc,
+                        base ^>=4.12.0.0,
+                        process,
+                        tasty,
+                        tasty-golden

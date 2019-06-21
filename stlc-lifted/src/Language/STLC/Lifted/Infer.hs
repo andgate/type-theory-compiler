@@ -40,10 +40,12 @@ withTypes :: MonadReader Env m => [(String, Type)] -> m a -> m a
 withTypes ns = local (\env -> foldl f env ns)
   where f env (n, ty) = Map.insert n ty env 
 
-inferModule :: [Defn] -> [Defn]
-inferModule modl = runFreshM (runReaderT m env)
-  where env = makeEnv modl
-        m = mapM inferDefn modl
+inferModule :: Module -> Module
+inferModule (Module n defns)
+  = Module n defns'
+  where env = makeEnv defns
+        m = mapM inferDefn defns
+        defns' = runFreshM (runReaderT m env)
 
 makeEnv :: [Defn] -> Map String Type
 makeEnv defns = Map.fromList defns''
