@@ -15,6 +15,10 @@ import qualified Data.Map.Strict as Map
 --             , No Nested Applications
 --             , Single-level Pattern matching
 
+---------------------------------------------------------------------------
+-- Module and Definitions
+---------------------------------------------------------------------------
+
 data Module = Module String [Defn]
 
 data Defn
@@ -29,99 +33,13 @@ data Func = Func String [Pat] Exp
 data Extern = Extern String [Type] Type
   deriving(Show)
 
+---------------------------------------------------------------------------
+-- Data Types
+---------------------------------------------------------------------------
+
 data DataType =
   DataType String [(String, [(Maybe String, Type)])]
   deriving(Show)
-
-data Exp
-  = ECall Exp [Exp]
-  | EVal Val
-  | ELet [(Pat, Exp)] Exp
-  | EIf Exp Exp Else
-  | EMatchI Exp [(Int, Exp)]
-  | EMatch Exp (NonEmpty (String, [Maybe String], Exp))
-  | EOp Op
-  | EType Exp Type
-  deriving(Show)
-
-data Pat
-  = PVar String
-  | PCon String [Pat]
-  | PWild
-  | PType Pat Type
-  deriving(Show)
-
-data Else
-  = Else Exp
-  | Elif Exp Exp Else
-  deriving(Show)
-
-data Val
-  = VVar String
-  | VInt Int
-  | VString String
-  | VArray [Exp]
-  deriving(Show)
-
-data Type
-  = TCon String
-  | TI8
-  | TI32
-  | TArray Int Type
-  | TPtr Type
-  | TString
-  | TVoid
-  | TFunc Type (NonEmpty Type)
-  deriving(Show)
-
-data Op
-  = IArithOp IArithOp
-  | FArithOp FArithOp
-  | PtrOp PtrOp
-  | MemOp MemOp
-  | ArrayOp ArrayOp
-  deriving(Show)
-
-data IArithOp
-  = AddOpI Exp Exp
-  | SubOpI Exp Exp
-  | MulOpI Exp Exp
-  deriving(Show)
-
-data FArithOp
-  = AddOpF Exp Exp
-  | SubOpF Exp Exp
-  | MulOpF Exp Exp
-  deriving(Show)
-
-data Constr = Constr String [Exp]
-  deriving(Show)
-
-data MemOp
-  = ConstrOp Constr    -- Stack allocation
-  | NewOp Constr       -- Heap allocation
-  | FreeOp Exp         -- Heap deallocation
-  | MemAccessI Exp Exp
-  | MemAccess Exp String  -- Memory access, can either be an integer or some member string
-  | MemUpdate String Exp  -- Memory update
-  deriving(Show)
-
-data PtrOp
-  = RefOp Exp
-  | DerefOp Exp
-  deriving(Show)
-
-data ArrayOp
-  = NewArrayOp Int Type
-  | FreeArrayOp Exp
-  | ResizeArrayOp String Int Type
-  | AccessArrayOp String Int
-  deriving(Show)
-
-data StringOp
-  = StrConstr String
-  deriving(Show)
-
 
 sizeDataType :: Map String Int -> DataType -> Int
 sizeDataType sizes (DataType _ cs) =
@@ -138,3 +56,100 @@ sizeType sizes = \case
   TPtr _ -> 8
   TString -> 8
   TVoid -> 1
+
+
+---------------------------------------------------------------------------
+-- Expressions
+---------------------------------------------------------------------------
+
+data Exp
+  = EVar String
+  | ELit Lit
+  | ECall Exp (NonEmpty Exp)
+  | EType Exp Type
+  | ELet (NonEmpty (Pat, Exp)) Exp
+  | EIf Exp Exp Else
+  | EMatchI Exp (NonEmpty (Int, Exp))  -- ^ This will disappear
+  | EMatch Exp (NonEmpty Clause)
+
+  | ERef Exp
+  | EDeref Exp
+
+  | ECon String [Exp]
+  | ENewCon String [Exp]
+  | EFree Exp
+
+  | EGet Exp String
+  | EGetI Exp Int
+  | ESet Exp Exp
+
+  | ENewArray [Exp]
+  | ENewArrayI Exp
+  | EResizeArray Exp Exp
+  | EArrayElem Exp Exp
+
+  | ENewString String
+  | ENewStringI Exp
+
+  | EOp Op
+  deriving(Show)
+
+-- Literals
+data Lit
+  = LI32 Int
+  | LI8 Int
+  | LChar Char
+  | LString String
+  | LStringI Int
+  | LArray [Exp]
+  | LArrayI Int
+  deriving(Show)
+
+  -- If Branches
+data Else
+  = Else Exp
+  | Elif Exp Exp Else
+  deriving(Show)
+
+-- Operations
+data Op
+  = OpAddI Exp Exp
+  | OpSubI Exp Exp
+  | OpMulI Exp Exp
+  | OpAddF Exp Exp
+  | OpSubF Exp Exp
+  | OpMulF Exp Exp
+  deriving(Show)
+
+
+---------------------------------------------------------------------------
+-- Types
+---------------------------------------------------------------------------
+
+data Type
+  = TCon String
+  | TI8
+  | TI32
+  | TChar
+  | TArray Int Type
+  | TPtr Type
+  | TString
+  | TVoid
+  | TFunc Type (NonEmpty Type)
+  deriving(Show)
+
+
+---------------------------------------------------------------------------
+-- Patterns
+---------------------------------------------------------------------------
+
+data Pat
+  = PVar String
+  | PCon String [Pat]
+  | PWild
+  | PType Pat Type
+  deriving(Show)
+
+-- Case branches
+data Clause = Clause String [Maybe String] Exp
+  deriving(Show)

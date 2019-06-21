@@ -7,6 +7,7 @@ import Language.LLTT.Syntax
 
 import Data.Text.Prettyprint.Doc
 
+import Data.Maybe
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
 
@@ -17,14 +18,14 @@ instance Pretty Module where
 
 instance Pretty Defn where
   pretty = \case
-    FuncDefn f -> pretty (FreshP f) <> line
+    FuncDefn f -> pretty f <> line
     ExternDefn ex -> pretty ex <> line
     DataTypeDefn dt -> pretty dt <> line
 
 
 instance Pretty Extern where
   pretty (Extern n paramtys retty)
-    = hsep ["extern", pretty n, ":", pretty (tarr paramtys retty)]
+    = hsep ["extern", pretty n, ":", pretty (TFunc retty (NE.fromList paramtys))]
 
 
 instance Pretty DataType where
@@ -78,120 +79,158 @@ instance Pretty Type where
       | True       -> parens (pretty ty) <> "*"
     TString -> "String"
     TVoid -> "Void"
-    TFunc retty [] -> pretty retty
-    TFunc retty paramtys -> concatWith (\x y -> x <+> "->" <+> y)
-                                       (pretty <$> (paramtys ++ [retty]))
+    TFunc retty paramtys ->
+      concatWith (\x y -> x <+> "->" <+> y)
+                 (pretty <$> (NE.toList paramtys ++ [retty]))
 
 
 instance Pretty Func where
-  prettyFresh (Func ty n bnd) = do
-    (ps, body) <- unbind bnd
+  pretty (Func n ps body@(EType _ retty)) =
     let ps' = do
           p <- ps
           let p' = pretty p
           return $ if isAPat p then p' else parens p'
-    body' <- prettyFresh body
-    case ps' of
+        body' = pretty body
+        paramtys = [ty | PType _ ty <- ps]
+        ty = if null paramtys
+              then retty
+              else TFunc retty (NE.fromList [ty | PType _ ty <- ps])
+
+    in case ps' of
       [] -> if isAExp body || isBExp body
-              then return $ vsep [ pretty n <+> ":" <+> pretty ty
-                                , pretty n <+> "=" <+> body'
-                                ]
-              else return $ vsep [ pretty n <+> ":" <+> pretty ty
-                                  , pretty n <+> "="
-                                  , indent 2 body'
-                                  ]
+              then vsep [ pretty n <+> ":" <+> pretty ty
+                        , pretty n <+> "=" <+> body'
+                        ]
+              else vsep [ pretty n <+> ":" <+> pretty ty
+                        , pretty n <+> "="
+                        , indent 2 body'
+                        ]
 
       _ -> if isAExp body || isBExp body
-              then return $ vsep [ pretty n <+> ":" <+> pretty ty
-                                , pretty n <+> hsep ps' <+> "=" <+> body'
-                                ]
-              else return $ vsep [ pretty n <+> ":" <+> pretty ty
-                                  , pretty n <+> hsep ps'
-                                  , indent 2 ("=" <+> align body')
-                                  ]
+              then vsep [ pretty n <+> ":" <+> pretty ty
+                        , pretty n <+> hsep ps' <+> "=" <+> body'
+                        ]
+              else vsep [ pretty n <+> ":" <+> pretty ty
+                        , pretty n <+> hsep ps'
+                        , indent 2 ("=" <+> align body')
+                        ]
 
 instance Pretty Exp where
-  prettyFresh = \case
-    EVar n -> return $ pretty (name2String n)
+  pretty = \case
+    EVar n -> pretty n
+    
+    ELit l -> pretty l
 
-    EType e ty -> do
-      e' <- prettyFresh e
-      let ty' = pretty ty
-      if isAExp e || isBExp e 
-        then return $ hsep [e', ":", ty']
-        else return $ hsep [parens e', ":", ty']
+    ECall f xs ->
+      let f' = wrapBExp f
+          xs' = wrapBExp <$> (NE.toList xs)
+      in hsep (f':xs') 
+
+    EType e ty ->
+      let e' = pretty e
+          ty' = pretty ty
+      in if isAExp e || isBExp e 
+        then hsep [e', ":", ty']
+        else hsep [parens e', ":", ty']
     
-    EApp f xs -> do
-      f' <- wrapBExpFresh f
-      xs' <- mapM wrapBExpFresh xs
-      return $ hsep (f':xs') 
-    
-    ELet bnd -> do
-      (r_qs, e) <- unbind bnd
-      let (ps, es) = unzip [ (p, e) | (p, Embed e) <- unrec r_qs]
-      let ps' = pretty <$> ps
-      es' <- mapM prettyFresh es
-      let qs' = [ q' <+> "=" <+> e'
+    ELet qs e ->
+      let (ps, es) = unzip (NE.toList qs)
+          ps' = pretty <$> ps
+          es' = pretty <$> es
+          qs' = [ q' <+> "=" <+> e'
                 | (q', e') <- zip ps' es' ]
-      e' <- prettyFresh e
-      return $ vsep [ "let" <+> align (vsep qs')
-                    , "in" <+> e'
-                    ]
-      
+          e' = pretty e
+      in vsep [ "let" <+> align (vsep qs')
+              , "in" <+> e'
+              ]
 
-    ECase e cls -> do
-      e' <- prettyFresh e
-      cls' <- mapM prettyFresh cls
-      return $ vsep $ [ "case" <+> e' <+> "of"
-                      , indent 2 (vsep cls')]
-    
+    EIf p t f -> 
+      vsep ["if" <+> pretty p
+           , indent 2 ("then" <+> pretty t)
+           , indent 2 (pretty f)
+           ]      
 
-    EInt i -> return $ pretty i
-    EString str -> return $ dquotes (pretty str)
-    
-    ECon n [] ->
-      return $ pretty n
+    EMatchI e cls ->
+      let e' = pretty e
+          cls' = pretty <$> cls
+      in vsep $ [ "matchi" <+> e' <+> "of"
+                , indent 2 (vsep $ NE.toList cls') ]
 
-    ECon n args -> do
-      args' <- mapM prettyFresh args
-      return $ pretty n <+> hsep args'
+    EMatch e cls ->
+      let e' = pretty e
+          cls' = pretty <$> cls
+      in vsep $ [ "match" <+> e' <+> "of"
+                , indent 2 (vsep $ NE.toList cls') ]
+
+
+    ERef e ->
+      let e' = pretty e
+      in if isAExp e
+          then "*" <> e'
+          else "*" <> parens e'
+
+    EDeref e ->
+      let e' = pretty e
+      in if isAExp e
+          then "&" <> e'
+          else "&" <> parens e'
+
+
+    ECon n [] -> pretty n
+
+    ECon n args ->
+      pretty n <+> hsep (wrapBExp <$> args)
 
     ENewCon n [] ->
-      return $ "new" <+> pretty n
+      "new" <+> pretty n
 
-    ENewCon n args -> do
-      args' <- mapM prettyFresh args
-      return $ "new" <+> pretty n <+> hsep args'
+    ENewCon n args -> 
+      "new" <+> pretty n <+> hsep (wrapBExp <$> args)
 
-    EFree e -> do
-      e' <- prettyFresh e
-      return $ "free" <+> e'
+    EFree e -> "free" <+> wrapBExp e
 
-    EDeref e -> do
-      e' <- prettyFresh e
-      if isAExp e
-        then return $ "&" <> e'
-        else return $ "&" <> parens e'
 
-    ERef e -> do
-      e' <- prettyFresh e
-      if isAExp e
-        then return $ "*" <> e'
-        else return $ "*" <> parens e'
+    EGet e m ->
+      wrapBExp e <> "." <> pretty m
 
-    EMember e m -> do
-      e' <- prettyFresh e
-      if isAExp e
-        then
-          return $ e' <> "." <> pretty m
-        else
-          return $ parens e' <> "." <> pretty m
+    EGetI e i ->
+      wrapBExp e <> brackets (pretty i)
 
-    EOp op -> prettyFresh op
+    ESet lhs rhs -> 
+      wrapBExp lhs <+> "<-" <+> wrapBExp rhs
+
+    ENewArray xs -> "new" <+> pretty xs
+    ENewArrayI i -> "new" <+> "Array" <> brackets (pretty i)
+    EResizeArray e i -> "resize" <+> wrapBExp e <> brackets (pretty i)
+    EArrayElem e i -> wrapBExp e <> brackets (pretty i)
+
+    ENewString str -> "new" <+> dquotes (pretty str)
+    ENewStringI i -> "new" <+> "String" <> brackets (pretty i)
+
+    EOp op -> pretty op
+
+
+instance Pretty Lit where
+  pretty = \case
+    LI32 i -> pretty i
+    LI8 i -> pretty i
+    LChar c -> squotes $ pretty c
+    LString str -> dquotes $ pretty str
+    LStringI i -> "String" <> brackets (pretty i)
+    LArray xs -> pretty xs
+    LArrayI i -> "Array" <> brackets (pretty i)
+
+instance Pretty Else where
+  pretty = \case
+    Else e -> "else" <+> pretty e
+    Elif p t f -> vsep [ "elif" <+> pretty p
+                       , "then" <+> pretty t
+                       , pretty f
+                       ]
 
 instance Pretty Pat where
   pretty = \case
-    PVar v -> pretty $ name2String v
+    PVar v -> pretty v
     PCon n [] -> pretty n
     PCon n ps ->
       let ps' = do
@@ -204,33 +243,61 @@ instance Pretty Pat where
     PWild -> "_"
     PType p ty -> hsep [pretty p, ":", pretty ty]
 
+
 instance Pretty Clause where
-  prettyFresh (Clause bnd) = do
-    (p, e) <- unbind bnd
-    let p' = if isAPat p || isBPat p
-               then pretty p
-               else parens $ pretty p                     
-    e' <- prettyFresh e
-    if isAExp e || isBExp e
-      then
-        return $ p' <+> "->" <+> e'
-      else
-        return $ vcat [ p' <+> "->"
-                      , indent 2 e'
-                      , mempty
-                      ]
+  pretty (Clause n [] e)
+    | isAExp e || isBExp e
+        = hsep [pretty n, "->", pretty e]
+    
+    | otherwise
+        = vcat [ pretty n <+> "->"
+               , indent 2 (pretty e)
+               , mempty
+               ]
+
+  pretty (Clause n xs e) =
+    let n'  = pretty n
+        xs' = maybe "_" pretty <$> xs
+    in if isAExp e || isBExp e then
+         hsep [n', hsep xs', "->", pretty e]
+       else
+         vcat [ hsep [n', hsep xs', "->"]
+              , indent 2 (pretty e)
+              , mempty
+              ]
+
 
 instance Pretty Op where
   pretty = \case
-    OpAddI a b -> do
-      a' <- wrapBExpFresh a
-      b' <- wrapBExpFresh b
-      return $ hsep ["add", a', b']
+    OpAddI a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["add", a', b']
 
-    OpMulI a b -> do
-      a' <- wrapBExpFresh a
-      b' <- wrapBExpFresh b
-      return $ hsep ["mul", a', b']
+    OpSubI a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["sub", a', b']
+
+    OpMulI a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["mul", a', b']
+    
+    OpAddF a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["addf", a', b']
+
+    OpSubF a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["subf", a', b']
+
+    OpMulF a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["mulf", a', b']
       
 
 wrapBExp :: Exp -> Doc ann
@@ -242,42 +309,69 @@ wrapBExp e
 isBExp :: Exp -> Bool
 isBExp = \case
   EVar _ -> False
+  ELit _ -> False
+  ECall _ _ -> True
   EType _ _ -> False
-  EApp _ _ -> True
-  ELet _ -> False
-  ECase _ _ -> False
-  EInt _ -> False
-  EString _ -> False
+  ELet _ _ -> False
+  EIf _ _ _ -> False
+  EMatchI _ _ -> False
+  EMatch _ _ -> False
+
+  ERef _ -> False
+  EDeref _ -> False
+  
   ECon _ [] -> False
   ECon _ _ -> True
   ENewCon _ _ -> True
   EFree e -> True
-  EDeref _ -> False
-  ERef _ -> False
-  EMember e _ -> False
-  EOp _ -> True
+  
+  EGet _ _ -> False
+  EGetI _ _ -> False
+  ESet _ _ -> True
+
+  ENewArray _ -> True
+  ENewArrayI _ -> True
+  EResizeArray _ _ -> True
+  EArrayElem _ _ -> False
+
+  ENewString _ -> True
+  ENewStringI _ -> True
 
 isAExp :: Exp -> Bool
 isAExp = \case
   EVar _ -> True
+  ELit _ -> True
+  ECall _ _ -> False
   EType _ _ -> False
-  EApp _ _ -> False
-  ELet _ -> False
-  ECase _ _ -> False
-  EInt _ -> True
-  EString _ -> True
+  ELet _ _ -> False
+  EIf _ _ _ -> False
+  EMatchI _ _ -> False
+  EMatch _ _ -> False
+
+  ERef _ -> True
+  EDeref _ -> True
+  
   ECon _ [] -> True
   ECon _ _ -> False
   ENewCon _ _ -> False
   EFree e -> False
-  EDeref _ -> True
-  ERef _ -> True
-  EMember e _ -> isAExp e 
+  
+  EGet e _ -> isAExp e
+  EGetI e _ -> isAExp e
+  ESet _ _ -> False
+
+  ENewArray _ -> False
+  ENewArrayI _ -> False
+  EResizeArray _ _ -> False
+  EArrayElem e _ -> isAExp e
+
+  ENewString _ -> False
+  ENewStringI _ -> False
+  
   EOp _ -> False
 
 isAType :: Type -> Bool
 isAType = \case
-  TArr _ _ -> False
   TCon _ -> True
   TI8 -> True
   TI32 -> True
@@ -285,6 +379,7 @@ isAType = \case
   TPtr _ -> True
   TString -> True
   TVoid -> True
+  TFunc _ _ -> False
 
 isAPat :: Pat -> Bool
 isAPat = \case
@@ -299,5 +394,5 @@ isBPat = \case
   PVar _ -> False
   PCon _ [] -> False
   PCon _ _ -> True
-  PWild -> False
+  PWild -> False 
   PType _ _ -> False

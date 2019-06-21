@@ -3,7 +3,11 @@
              MultiParamTypeClasses, 
              FlexibleContexts,
              DeriveGeneric,
-             DeriveDataTypeable
+             DeriveDataTypeable,
+             DataKinds,
+             GADTs,
+             KindSignatures,
+             StandaloneDeriving
   #-}
 module Language.STLC.Lifted.Syntax where
 
@@ -58,28 +62,76 @@ data Func = Func Type String (Bind [Pat] Exp)
 func :: String -> Type -> [Pat] -> Exp -> Func
 func n ty ps body = Func ty n (bind ps body)
 
+---------------------------------------------------------------------------
+-- Expressions
+---------------------------------------------------------------------------
 
-data Exp
+type Exp = Exp' Type
+data Exp' t
   = EVar Var
-  | EType Exp Type
-  | EApp Exp [Exp]
-  | ELet (Bind (Rec [(Pat, Embed Exp)]) Exp)
-  | ECase Exp [Clause]
-  | EInt Int
-  | EString String
-  | ECon String [Exp]
-  | ENewCon String [Exp]
-  | EFree Exp
-  | EDeref Exp
-  | ERef Exp
-  | EMember Exp String
-  | EOp Op
+  | ELit (Lit' (Exp' t))
+  | EType (Exp' t) t
+  | EApp (Exp' t) [Exp' t]
+  | ELet (Bind (Rec [(Pat' t, Embed (Exp' t))]) (Exp' t))
+  | EIf (Exp' t) (Exp' t) (Else' t)
+  | ECase (Exp' t) [Clause' t]
+
+  | EDeref (Exp' t)
+  | ERef (Exp' t)
+  
+  | ECon String [Exp' t]
+  | ENewCon String [Exp' t]
+  | EFree (Exp' t)
+
+  | EGet (Exp' t) String
+  | EGetI (Exp' t) (Exp' t)
+  | ESet (Exp' t) (Exp' t)
+
+  | ENewArray [Exp' t]
+  | ENewArrayI (Exp' t)
+  | EFreeArray (Exp' t)
+  | EResizeArray (Exp' t) (Exp' t)
+  | EArrayElem (Exp' t) (Exp' t)
+
+  | ENewString (Exp' t)
+  | ENewStringI (Exp' t)
+
+  | EOp (Op' t)
   deriving (Show, Generic, Typeable)
 
-data Op
-  = OpAddI Exp Exp
-  | OpMulI Exp Exp
+-- Literals
+type Lit = Lit' Exp
+type FullLit = Lit' LLit
+data Lit' e
+  = LI32 Int
+  | LI8 Int
+  | LChar Char
+  | LString String
+  | LStringI e
+  | LArray [e]
+  | LArrayI e
   deriving (Show, Generic, Typeable)
+
+-- Else Branches
+type Else = Else' Type
+data Else' t
+  = Else (Exp' t)
+  | Elif (Exp' t) (Exp' t) (Else' t)
+  deriving (Show, Generic, Typeable)
+
+-- Operations
+type Op = Op' Type
+data Op' t
+  = OpAddI (Exp' t) (Exp' t)
+  | OpSubI (Exp' t) (Exp' t)
+  | OpMulI (Exp' t) (Exp' t)
+  | OpAddF (Exp' t) (Exp' t)
+  | OpSubF (Exp' t) (Exp' t)
+  | OpMulF (Exp' t) (Exp' t)
+  deriving (Show, Generic, Typeable)
+
+
+--Helpers
 
 evar :: String -> Exp
 evar = EVar . s2n
@@ -93,20 +145,33 @@ elet qs body = ELet (bind (rec (second embed <$> qs)) body)
 ecase :: Exp -> [(Pat, Exp)] -> Exp
 ecase e qs = ECase e [Clause (bind p e') | (p, e') <- qs]
 
-data Type
-  = TArr Type Type 
-  | TCon String
-  | TI8
-  | TI32
-  | TArray Int Type
-  | TPtr Type
-  | TString
-  | TVoid
+
+---------------------------------------------------------------------------
+-- Types
+---------------------------------------------------------------------------
+
+
+data TypeKind = Mono | Poly
+
+type TVar = Name Type
+
+type Type = Type' Mono -- STLC only allows mono types
+data Type' :: TypeKind -> * where
+  TUnit :: Type' a
+  TVar :: TVar -> Type' Poly
+  TArr :: Type' a -> Type' a -> Type' a
+  TCon :: String -> Type' a
+  TI8 :: Type' a
+  TI32 :: Type' a
+  TChar :: Type' a
+  TArray Int Type :: Int -> Type' a -> Type' a 
+  TPtr :: Type' a -> Type' a
+  TString :: Type' a
+  TVoid :: Type' a
   deriving (Show, Generic, Typeable)
 
-tarr :: [Type] -> Type -> Type
-tarr paramtys retty
-  = foldr (\a b -> TArr a b) retty paramtys
+
+-- Type Equality
 
 instance Eq Type where
   (==) a b = case (a, b) of
@@ -124,10 +189,20 @@ instance Eq Type where
     _ -> False
 
 
+-- Helpers
+
+tarr :: [Type] -> Type -> Type
+tarr paramtys retty
+  = foldr (\a b -> TArr a b) retty paramtys
+
 exType :: Exp -> Type
 exType (EType _ ty) = ty
 exType _ = error "Expected typed expression!"
 
+
+---------------------------------------------------------------------------
+-- Patterns
+---------------------------------------------------------------------------
 
 data Pat
   = PVar Var
@@ -136,8 +211,11 @@ data Pat
   | PType Pat Type
   deriving (Show, Generic, Typeable)
 
+-- Clauses (Case branches)
 data Clause = Clause (Bind Pat Exp)
   deriving (Show, Generic, Typeable)
+
+-- Helpers
 
 pvar :: String -> Pat
 pvar = PVar . s2n
@@ -161,6 +239,10 @@ splitType = \case
   t -> ([], t)
 
 
+---------------------------------------------------------------------------
+-- Alpha and Subst instances for unbound-generics
+---------------------------------------------------------------------------
+
 instance Alpha Exp
 instance Alpha Type
 instance Alpha Func
@@ -179,7 +261,12 @@ instance Subst Exp Exp where
   isvar (EVar v) = Just (SubstName v)
   isvar _  = Nothing
 
-
--------------------------------------------
--- Type Equality
-
+instance Subst Type Func
+instance Subst Type Pat
+instance Subst Type Clause
+instance Subst Type Op
+instance Subst Type a => Subst Type (Telescope a)
+instance Subst Type Exp where
+instance Subst Type Type where
+  isvar (TVar v) = Just (SubstName v)
+  isvar _  = Nothing

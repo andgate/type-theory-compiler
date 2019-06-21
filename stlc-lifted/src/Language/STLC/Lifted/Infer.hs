@@ -236,3 +236,49 @@ inferPat ty = \case
             ++ "expected type: " ++ show ty' ++ "\n\n"
             ++ "env: " ++ show env ++ "\n\n"
     | True -> inferPat ty' p
+
+
+
+import Language.STLC.Syntax
+
+import Data.Map.Strict (Map)
+import qualified Data.Map.Strict as Map
+
+type PolyExp = Exp' PolyType
+type PolyType = Type' Poly
+
+type Substitution = (PolyType, PolyType)
+type Substitutions = [Substitution]
+type Constraint   = (PolyType, PolyType)
+type Constraints = [Constraint]
+
+-----------------------------------------------------------
+-- Algorithm W
+--   This algorithm does type inference in three phases:
+--      1) Constraint gathering, temporary type variable instantiation
+--      2) Unification, turning constraints into substitutions
+--      3) Inference, apply substitutions and
+--         convert back to a monotype.
+-----------------------------------------------------------
+
+-----------------------------------------------------------
+-- Constraint Gathering
+-----------------------------------------------------------
+
+constraints :: Fresh m => Exp -> m (PolyExp, Constraints)
+constraints = undefined
+
+
+-----------------------------------------------------------
+-- Unification
+-----------------------------------------------------------
+
+unify :: Constraints -> Substitutions
+unify = undefined
+
+
+-----------------------------------------------------------
+-- Inference
+-----------------------------------------------------------
+
+infer :: Substitutions -> PolyExp -> Exp

@@ -11,6 +11,8 @@ module Language.STLC.Lifted.Desugar where
 import Language.STLC.Lifted.Syntax
 import qualified Language.LLTT.Syntax as LL
 
+import Language.STLC.Lifted.Eval
+
 import Control.Monad
 import Data.Bifunctor
 import Data.Maybe

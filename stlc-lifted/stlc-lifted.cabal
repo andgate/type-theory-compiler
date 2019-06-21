@@ -17,6 +17,7 @@ extra-source-files:  CHANGELOG.md
 
 library
   exposed-modules:     Language.STLC.Lifted.Desugar
+                       Language.STLC.Lifted.Eval
                        Language.STLC.Lifted.Infer
                        Language.STLC.Lifted.Match
                        Language.STLC.Lifted.Pretty
