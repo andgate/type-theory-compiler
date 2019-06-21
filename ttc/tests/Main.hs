@@ -78,7 +78,7 @@ compileDir :: FilePath -> FilePath -> IO ()
 compileDir srcDir outPath = do
   let exePath = "tests/bin/multi/" <> takeBaseName srcDir <> ".exe"
   srcPaths <- findByExtension [".hk"] srcDir
-  h1 <- spawnCommand $ "cabal new-run hcc -- " ++ intercalate " " srcPaths ++ " -o " ++ exePath
+  h1 <- spawnCommand $ "cabal new-run ttc -- " ++ intercalate " " srcPaths ++ " -o " ++ exePath
   exit_code <- waitForProcess h1
 
   case exit_code of
