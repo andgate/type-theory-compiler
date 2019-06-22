@@ -7,10 +7,10 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Text.IO as T
 
 import Language.STLC.Desugar
-import Language.STLC.Infer
 import Language.STLC.Match
 import Language.STLC.Pretty
 import Language.STLC.Syntax
+import Language.STLC.TypeCheck
 
 import Language.LLTT.Pretty
 import Language.LLTT.LLVM.Codegen
@@ -195,7 +195,7 @@ compileModule fp modl = do
   withFile (fp ++ ".stlc") WriteMode $ \h -> 
     hPutDoc h $ pretty stlc
 
-  let stlc' = inferModule stlc
+  let stlc' = checkModule stlc
   withFile (fp ++ "-typed.stlc") WriteMode $ \h -> 
     hPutDoc h $ pretty stlc'
   

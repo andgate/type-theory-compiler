@@ -10,7 +10,7 @@ extern puts : String -> I32
 
 derefInt : I32* -> I32
 derefInt (a : I32*)
-  = &(a : I32*) : I32
+  = *(a : I32*) : I32
 
 type MaybeInt
   = Nothing 
@@ -25,4 +25,8 @@ nothing =
 
 just5 : MaybeInt*
 just5 =
-  new Just 
+  new Just 5 : I32 : MaybeInt*
+
+dot : IVector3 -> IVector3 -> I32
+dot (v1 : IVector3) (v2 : IVector3)
+  = (let 

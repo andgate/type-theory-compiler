@@ -84,7 +84,7 @@ data Exp
   | EFree Exp
 
   | EGet Exp String
-  | EGetI Exp Exp
+  | EGetI Exp Exp  -- For arrays only
   | ESet Exp Exp
 
   | ENewArray [Exp]
@@ -101,6 +101,7 @@ data Exp
 data Lit
   = LInt Int
   | LChar Char
+  | LBool Bool
   | LString String
   | LStringI Exp
   | LArray [Exp]
@@ -148,6 +149,7 @@ data Type
   | TCon String
   | TI8
   | TI32
+  | TBool
   | TChar
   | TArray Int Type 
   | TPtr Type
@@ -183,6 +185,51 @@ exType :: Exp -> Type
 exType (EType _ ty) = ty
 exType _ = error "Expected typed expression!"
 
+exPType :: Pat -> Type
+exPType (PType _ ty) = ty
+exPType _ = error "Expected typed expression!"
+
+exElseType :: Else -> Type
+exElseType = \case
+  Else e -> exType e
+  Elif p t f -> unify (exType t) (exElseType f)
+
+
+inttypes :: [Type]
+inttypes = [TI8, TI32]
+
+-- Unification for typecking.
+-- Checks if types are equal.
+-- Throws an error if not.
+-- Returns the most specific type
+unify :: Type -> Type -> Type
+unify (TPtr t1) (TArray n t2)
+  | t1 == t2 = TArray n t2
+  | otherwise = unify_err (TPtr t1) (TArray n t2)
+
+unify (TArray n t1) (TPtr t2)
+  | t1 == t2 = TArray n t2
+  | otherwise = unify_err (TArray n t1) (TPtr t2)
+
+unify (TPtr TI8) TString = TString
+unify TString (TPtr TI8) = TString
+
+unify (TArray n t1) (TPtr t2)
+  | t1 == t2 = TPtr t2
+  | otherwise = unify_err (TArray n t1) (TPtr t2)
+
+
+unify t1 t2
+  | t1 == t2 = t2
+  | otherwise = unify_err t1 t2
+
+
+unify_err :: Type -> Type -> Type
+unify_err t1 t2 = error $ "Type mismatch!\n"
+                     ++ "Expected:\t" ++ show t1 ++ "\n"
+                     ++ "Actual:\t" ++ show t2 ++ "\n"
+
+
 
 ---------------------------------------------------------------------------
 -- Patterns
@@ -198,6 +245,11 @@ data Pat
 -- Clauses (Case branches)
 data Clause = Clause (Bind Pat Exp)
   deriving (Show, Generic, Typeable)
+
+exClauseBody :: Fresh m => Clause -> m Exp
+exClauseBody (Clause bnd)
+  = snd <$> unbind bnd
+
 
 -- Helpers
 

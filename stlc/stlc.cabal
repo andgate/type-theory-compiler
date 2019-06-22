@@ -18,7 +18,6 @@ extra-source-files:  CHANGELOG.md
 library
   exposed-modules:     Language.STLC.CConv
                        Language.STLC.Desugar
-                       Language.STLC.Infer
                        Language.STLC.Lex
                        Language.STLC.Lift
                        Language.STLC.Match
@@ -28,6 +27,7 @@ library
                        Language.STLC.Pretty
                        Language.STLC.Reduce
                        Language.STLC.Syntax
+                       Language.STLC.TypeCheck
   -- other-modules:
   -- other-extensions:
   build-depends:       lltt,
