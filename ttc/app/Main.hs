@@ -6,14 +6,13 @@ import qualified Data.Map.Strict as Map
 
 import qualified Data.Text.IO as T
 
-import Language.STLC.Lifted.Pretty
+import Language.STLC.Desugar
+import Language.STLC.Infer
+import Language.STLC.Match
+import Language.STLC.Pretty
+import Language.STLC.Syntax
+
 import Language.LLTT.Pretty
-
-import Language.STLC.Lifted.Syntax
-import Language.STLC.Lifted.Infer
-import Language.STLC.Lifted.Match
-import Language.STLC.Lifted.Desugar
-
 import Language.LLTT.LLVM.Codegen
 
 import qualified LLVM.Module as LLVM
@@ -48,7 +47,7 @@ nothingFunc = FuncDefn $ func "nothing" (TCon "MaybeInt") [] body
   where body = ECon "Nothing" []
 
 just5Func = FuncDefn $ func "just5" (TPtr $ TCon "MaybeInt") [] body
-  where body = ENewCon "Just" [EInt 5]
+  where body = ENewCon "Just" [ELit $ LInt 5]
 
 
 dotFunc = FuncDefn $ func "dot"
@@ -56,12 +55,12 @@ dotFunc = FuncDefn $ func "dot"
                           [ PType (pvar "v1") (TCon "IVector3")
                           , PType (pvar "v2") (TCon "IVector3") ]
                           body
-  where body  = elet [ (pvar "x1", EMember (evar "v1") "x")
-                     , (pvar "y1", EMember (evar "v1") "y")
-                     , (pvar "z1", EMember (evar "v1") "z")
-                     , (pvar "x2", EMember (evar "v2") "x")
-                     , (pvar "y2", EMember (evar "v2") "y")
-                     , (pvar "z2", EMember (evar "v2") "z")
+  where body  = elet [ (pvar "x1", EGet (evar "v1") "x")
+                     , (pvar "y1", EGet (evar "v1") "y")
+                     , (pvar "z1", EGet (evar "v1") "z")
+                     , (pvar "x2", EGet (evar "v2") "x")
+                     , (pvar "y2", EGet (evar "v2") "y")
+                     , (pvar "z2", EGet (evar "v2") "z")
                      , (pvar "a1", EOp $ OpMulI (evar "x1") (evar "x2"))
                      , (pvar "a2", EOp $ OpMulI (evar "y1") (evar "y2"))
                      , (pvar "a3", EOp $ OpMulI (evar "z1") (evar "z2"))
@@ -76,7 +75,7 @@ exMaybeFunc = FuncDefn $ func "exMaybe"
                               body
   where body = ecase (evar "may_x")
                      [ (PCon "Just" [pvar "x"], evar "x")
-                     , (PCon "Nothing"  [], EInt 0)
+                     , (PCon "Nothing"  [], ELit $ LInt 0)
                      ]
 
 addFunc = FuncDefn $ func "add"
@@ -150,8 +149,8 @@ mainFunc = FuncDefn $ func "main"
                            (tarr [TI32, TPtr (TPtr TI8)] TI32)
                            [ pvar "argc", pvar "argv" ]
                            body 
-  where body = elet [ (pvar "hello", EString "Hello World")
-                    , (pvar "five", EString "5")
+  where body = elet [ (pvar "hello", ELit $ LString "Hello World")
+                    , (pvar "five", ELit $ LString "5")
                     , (pvar "may_5_ptr", evar "just5")
                     , (pvar "may_5", EDeref $ evar "may_5_ptr")
                     , (pvar "may_not", evar "nothing") ]

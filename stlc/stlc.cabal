@@ -18,7 +18,7 @@ extra-source-files:  CHANGELOG.md
 library
   exposed-modules:     Language.STLC.CConv
                        Language.STLC.Desugar
-                       Language.STLC.Eval
+                       Language.STLC.Infer
                        Language.STLC.Lex
                        Language.STLC.Lift
                        Language.STLC.Match
@@ -26,6 +26,7 @@ library
                        Language.STLC.Parse
                        Language.STLC.Partial
                        Language.STLC.Pretty
+                       Language.STLC.Reduce
                        Language.STLC.Syntax
   -- other-modules:
   -- other-extensions:

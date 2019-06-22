@@ -144,8 +144,7 @@ ecase e qs = ECase e [Clause (bind p e') | (p, e') <- qs]
 ---------------------------------------------------------------------------
 
 data Type
-  = TUnit
-  | TArr Type Type
+  = TArr Type Type
   | TCon String
   | TI8
   | TI32

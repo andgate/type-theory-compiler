@@ -125,9 +125,11 @@ envLookupMember :: String -> Env -> Maybe (Type, Int)
 envLookupMember mem_n env = Map.lookup mem_n (envMembers env)
 
 
-genModule :: Env -> [LL.Defn] -> Module
-genModule env defns = buildModule "exampleModule" $
-                        foldM genDefn env defns
+genModule :: Env -> LL.Module -> Module
+genModule env (LL.Module n defns)
+  = buildModule "exampleModule"
+              $ foldM genDefn env defns
+
 
 genDefn :: (MonadFix m, MonadModuleBuilder m) => Env-> LL.Defn -> m Env
 genDefn env = \case

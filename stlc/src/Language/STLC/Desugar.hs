@@ -11,7 +11,7 @@ module Language.STLC.Desugar where
 import Language.STLC.Syntax
 import qualified Language.LLTT.Syntax as LL
 
-import Language.STLC.Eval
+import Language.STLC.Reduce
 
 import Control.Monad
 import Data.Bifunctor
@@ -65,14 +65,16 @@ desugarExp e = error $ "desugarExp - Expected typed expression:\n\n" ++ show e +
 desugarExp'  :: Fresh m => Type -> Exp -> m LL.Exp
 desugarExp' ty = \case
   EVar n ->
-    return $ LL.EVal . LL.VVar . name2String $ n
+    return $ LL.EVar . name2String $ n
+
+  ELit l -> LL.ELit <$> desugarLit l
 
   EType e ty' -> LL.EType <$> desugarExp' ty' e <*> pure (desugarType ty')
   
   EApp f xs -> do
     f' <- desugarExp f
     xs' <- mapM desugarExp xs
-    return $ LL.ECall f' xs'
+    return $ LL.ECall f' (NE.fromList xs')
   
   ELet bnd -> do
     (unrec -> letbnds, body) <- unbind bnd
@@ -81,7 +83,9 @@ desugarExp' ty = \case
     es' <- mapM desugarExp es
     let rhs = zip ps' es'
     body' <- desugarExp body
-    return $ LL.ELet rhs body'
+    return $ LL.ELet (NE.fromList rhs) body'
+
+  EIf p t f -> undefined
 
   ECase e@(EType _ TI32) cls -> do
     error "Integer case not supported"
@@ -91,51 +95,67 @@ desugarExp' ty = \case
     cls' <- NE.fromList <$> mapM desugarClause cls
     return $ LL.EMatch e' cls'
 
-  EInt i -> return $ LL.EVal $ LL.VInt i
-  EString str -> return $ LL.EVal $ LL.VString str
+  ERef e ->
+    LL.ERef <$> desugarExp e
+  
+  EDeref e -> 
+    LL.EDeref <$> desugarExp e
 
-  ECon n xs -> do
-    xs' <- mapM desugarExp xs
-    return $ LL.EOp $ LL.MemOp $ LL.ConstrOp $ LL.Constr n xs'
 
-  ENewCon n xs -> do
-    xs' <- mapM desugarExp xs
-    return $ LL.EOp $ LL.MemOp $ LL.NewOp $ LL.Constr n xs'
+  ECon n xs ->
+    LL.ECon n <$> mapM desugarExp xs
 
-  EFree e -> do
-    e' <- desugarExp e
-    return $ LL.EOp $ LL.MemOp $ LL.FreeOp e'
+  ENewCon n xs ->
+    LL.ENewCon n <$> mapM desugarExp xs
 
-  EDeref e -> do
-    e' <- desugarExp e
-    return $ LL.EOp $ LL.PtrOp $ LL.DerefOp e'
+  EFree e -> 
+    LL.EFree <$> desugarExp e
 
-  ERef e -> do
-    e' <- desugarExp e
-    return $ LL.EOp $ LL.PtrOp $ LL.RefOp e'
-
-  EMember e m -> do
-    e' <- desugarExp e
-    return $ LL.EOp $ LL.MemOp $ LL.MemAccess e' m
+  
+  EGet e m ->
+    LL.EGet <$> desugarExp e <*> pure m
 
   EOp op -> LL.EOp <$> desugarOp op
 
   e -> error $ "unhandled case: " ++ show e
 
+
+desugarLit :: Fresh m => Lit -> m LL.Lit
+desugarLit = \case
+  LInt i     -> pure $ LL.LInt i
+  LChar c    -> pure $ LL.LChar c
+  LString s  -> pure $ LL.LString s
+  LStringI i ->
+    case reduceBy mempty 50 i of
+      ELit (LInt i) -> return $ LL.LStringI i
+      _ -> error "desugar - expected constant integer!"
+
+  LArray xs  -> LL.LArray   <$> mapM desugarExp xs
+  LArrayI i  ->
+    case reduceBy mempty 50 i of
+      ELit (LInt i) -> return $ LL.LArrayI i
+      _ -> error "desugar - expected constant integer!"
+
 desugarOp :: Fresh m => Op -> m LL.Op
 desugarOp = \case
-  OpAddI a b -> LL.IArithOp <$> (LL.AddOpI <$> desugarExp a <*> desugarExp b)
-  OpMulI a b -> LL.IArithOp <$> (LL.MulOpI <$> desugarExp a <*> desugarExp b)
+  OpAddI a b -> LL.OpAddI <$> desugarExp a <*> desugarExp b
+  OpSubI a b -> LL.OpSubI <$> desugarExp a <*> desugarExp b
+  OpMulI a b -> LL.OpMulI <$> desugarExp a <*> desugarExp b
+
+  OpAddF a b -> LL.OpAddF <$> desugarExp a <*> desugarExp b
+  OpSubF a b -> LL.OpSubF <$> desugarExp a <*> desugarExp b
+  OpMulF a b -> LL.OpMulF <$> desugarExp a <*> desugarExp b
 
 desugarType :: Type -> LL.Type
 desugarType = \case
   ty@(TArr a b) ->
     let (paramtys, retty) = splitType ty
-    in LL.TFunc (desugarType retty) (desugarType <$> paramtys) 
+    in LL.TFunc (desugarType retty) (NE.fromList $ desugarType <$> paramtys) 
 
   TCon n  -> LL.TCon n
   TI8     -> LL.TI8
   TI32    -> LL.TI32
+  TChar   -> LL.TChar
   TArray i ty -> LL.TArray i (desugarType ty)
   TPtr ty -> LL.TPtr (desugarType ty)
   TString -> LL.TString
@@ -150,14 +170,14 @@ desugarPat = \case
   PType p ty -> LL.PType (desugarPat p) (desugarType ty)
 
 
-desugarClause :: Fresh m => Clause -> m (String, [Maybe String], LL.Exp)
+desugarClause :: Fresh m => Clause -> m LL.Clause
 desugarClause (Clause bnd) = do
   (p, e) <- unbind bnd
   let ns = (Just . fst) <$> patTypedVars p
   case p of
     PType (PCon n args) _ -> do
       e' <- desugarExp e
-      return (n, ns, e')
+      return $ LL.Clause n ns e'
 
     p -> error $ "typed pattern expected, instead found:\n\n" ++ show p ++ "\n\n"
 
