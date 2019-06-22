@@ -1,6 +1,3 @@
-module Language.LLTT.Infer where
-
-import Language.LLTT.Syntax
 {-# LANGUAGE LambdaCase
            , ConstraintKinds
            , FlexibleContexts
@@ -11,6 +8,9 @@ import Language.LLTT.Syntax
            , DeriveDataTypeable
            , TypeSynonymInstances
           #-}
+module Language.LLTT.Infer where
+
+import Language.LLTT.Syntax
 
 {-
 -- Type Inference

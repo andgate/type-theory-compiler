@@ -1,0 +1,28 @@
+module Test
+
+extern malloc : I32 -> I8*
+
+extern free : I8* -> Void
+
+extern memcpy : I8* -> I8* -> I32 -> I8*
+
+extern puts : String -> I32
+
+derefInt : I32* -> I32
+derefInt (a : I32*)
+  = &(a : I32*) : I32
+
+type MaybeInt
+  = Nothing 
+  | Just I32
+
+type IVector3
+  = V3 {x : I32,y : I32,z : I32}
+
+nothing : MaybeInt
+nothing =
+  Nothing : MaybeInt
+
+just5 : MaybeInt*
+just5 =
+  new Just 
