@@ -1,0 +1,36 @@
+module Test
+
+extern malloc : I32 -> I8*
+
+extern free : I8* -> Void
+
+extern memcpy : I8* -> I8* -> I32 -> I8*
+
+extern puts : String -> I32
+
+type MaybeInt
+  = Nothing 
+  | Just I32
+
+nothing : MaybeInt
+nothing =
+  Nothing : MaybeInt
+
+just5 : MaybeInt*
+just5 =
+  new Just (5 : I32) : MaybeInt*
+
+main : I32 -> I8** -> I32
+main (argc : I32) (argv : I8**)
+  = (let hello : String = "Hello World" : String
+         five : String = "5" : String
+         may_5_ptr : MaybeInt* = just5 : MaybeInt*
+         may_5 : MaybeInt = &(may_5_ptr : MaybeInt*) : MaybeInt
+         may_not : MaybeInt = nothing : MaybeInt
+    in (match may_not : MaybeInt of
+      Nothing ->
+        (puts : String -> I32) (hello : String) : I32
+      
+      Just c ->
+        (puts : String -> I32) (five : String) : I32
+      ) : I32) : I32

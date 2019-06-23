@@ -8,16 +8,9 @@ extern memcpy : I8* -> I8* -> I32 -> I8*
 
 extern puts : String -> I32
 
-derefInt : I32* -> I32
-derefInt (a : I32*)
-  = *(a : I32*) : I32
-
 type MaybeInt
   = Nothing 
   | Just I32
-
-type IVector3
-  = V3 {x : I32,y : I32,z : I32}
 
 nothing : MaybeInt
 nothing =
@@ -27,6 +20,17 @@ just5 : MaybeInt*
 just5 =
   new Just 5 : I32 : MaybeInt*
 
-dot : IVector3 -> IVector3 -> I32
-dot (v1 : IVector3) (v2 : IVector3)
-  = (let 
+main : I32 -> I8** -> I32
+main (argc : I32) (argv : I8**)
+  = (let hello : String = "Hello World" : String
+         five : String = "5" : String
+         may_5_ptr : MaybeInt* = just5 : MaybeInt*
+         may_5 : MaybeInt = &(may_5_ptr : MaybeInt*) : MaybeInt
+         may_not : MaybeInt = nothing : MaybeInt
+    in (case may_not : MaybeInt of
+      (Nothing : MaybeInt) ->
+        (puts : String -> I32) (hello : String) : I32
+      
+      (Just (c : I32) : MaybeInt) ->
+        (puts : String -> I32) (five : String) : I32
+      ) : I32) : I32

@@ -180,13 +180,13 @@ tcExp (ELam bnd) (Just ty) = do
 tcExp (ELet bnd) mty = do
   (unrec -> letbnds, body) <- unbind bnd
   let qs = second unembed <$> letbnds
-      go (ns, qs) q
-        = withTypes ns $ do
-            q@(p, _) <- tcEquation q Nothing Nothing
-            let ns' = patTypedVars p
-            return (ns' <> ns, q:qs)
-
-  (ns, qs') <- foldM go ([], []) qs
+      go [] qs' = return qs'
+      go (q:qs) qs' = do
+            q'@(p, _) <- tcLetBind q
+            let ns = patTypedVars p
+            withTypes ns $ go qs (q':qs')
+  qs' <- reverse <$> go qs []
+  let ns = concatMap (patTypedVars . fst) qs'
   withTypes ns $ do
     body' <- tcExp body mty
     let letbnds' = rec (second embed <$> qs')
@@ -232,12 +232,12 @@ tcExp (ERef e) (Just ty) =
 tcExp (EDeref e) Nothing = do
   e' <- inferType e
   case exType e' of
-    TPtr ty' -> return $ EType (ERef e') ty'
+    TPtr ty' -> return $ EType (EDeref e') ty'
     _ -> error $ "Expected a pointer type. Cannot dereference a non-pointer."
 
 tcExp (EDeref e) (Just ty) = do
   e' <- checkType e (TPtr ty)
-  return $ EType (ERef e') ty
+  return $ EType (EDeref e') ty
 
 
 -- Constructor Expression
@@ -425,6 +425,14 @@ tcEquation (p, e) pmty emty = do
     e' <- tcExp e emty
     return (p', e')
 
+tcLetBind :: MonadTc m => (Pat, Exp) -> m (Pat, Exp)
+tcLetBind (p, e) = do
+  e' <- inferType e
+  let ty' = exType e'
+  p' <- tcPat p (Just ty')
+  return (p', e')
+
+
 tcElse :: MonadTc m => Else -> Maybe Type -> m Else
 tcElse (Else e) mty = Else <$> tcExp e mty
 tcElse (Elif p t f) (Nothing) = do
@@ -466,7 +474,7 @@ tcBOpI constr a b (Just ty)
 
 tcPat :: MonadTc m => Pat -> Maybe Type  -> m Pat
 tcPat (PVar v) (Just ty) = return $ PType (PVar v) ty
-tcPat (PVar v) Nothing = error $ "Can not infer type of variable pattern."
+tcPat (PVar v) Nothing = error $ "Cannot infer type of pattern variable " ++ name2String v
 
 tcPat (PCon n ps) Nothing = do
   n_ty <- lookupType n

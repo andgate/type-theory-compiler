@@ -167,20 +167,20 @@ testSource
             , freeExtern
             , memcpyExtern
             , putsExtern
-            , derefIntFunc
+            --, derefIntFunc
             , maybeIntType
-            , iVector3Type
+            --, iVector3Type
             , nothingFunc
             , just5Func
-            , dotFunc
-            , exMaybeFunc
-            , addFunc
-            , mulFunc
-            , constFunc
-            , idFunc
-            , idMaybeFunc
-            , addMulFunc
-            , maybeAddMulFunc
+            --, dotFunc
+            --, exMaybeFunc
+            --, addFunc
+            --, mulFunc
+            --, constFunc
+            --, idFunc
+            --, idMaybeFunc
+            --, addMulFunc
+            --, maybeAddMulFunc
             , mainFunc
             ]
 
@@ -199,11 +199,11 @@ compileModule fp modl = do
   withFile (fp ++ "-typed.stlc") WriteMode $ \h -> 
     hPutDoc h $ pretty stlc'
   
-  let stlc'' = matchModule stlc'
-  withFile (fp ++ "-matched.stlc") WriteMode $ \h -> 
-    hPutDoc h $ pretty stlc''
+  --let stlc'' = matchModule stlc'
+  --withFile (fp ++ "-matched.stlc") WriteMode $ \h -> 
+  --  hPutDoc h $ pretty stlc''
 
-  let lltc = desugarModule stlc''
+  let lltc = desugarModule stlc'
   withFile (fp ++ ".lltt") WriteMode $ \h -> 
     hPutDoc h $ pretty lltc
 

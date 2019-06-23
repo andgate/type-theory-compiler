@@ -201,7 +201,7 @@ inttypes = [TI8, TI32]
 -- Unification for typecking.
 -- Checks if types are equal.
 -- Throws an error if not.
--- Returns the most specific type
+-- Returns the most specific type.
 unify :: Type -> Type -> Type
 unify (TPtr t1) (TArray n t2)
   | t1 == t2 = TArray n t2
