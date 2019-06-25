@@ -100,6 +100,7 @@ data Exp
 -- Literals
 data Lit
   = LInt Int
+  | LDouble Double
   | LChar Char
   | LBool Bool
   | LString String
@@ -139,6 +140,8 @@ elet qs body = ELet (bind (rec (second embed <$> qs)) body)
 ecase :: Exp -> [(Pat, Exp)] -> Exp
 ecase e qs = ECase e [Clause (bind p e') | (p, e') <- qs]
 
+elam :: [Pat] -> Exp -> Exp
+elam ps body = ELam (bind ps body)
 
 ---------------------------------------------------------------------------
 -- Types
@@ -149,6 +152,9 @@ data Type
   | TCon String
   | TI8
   | TI32
+  | TI64
+  | TF32
+  | TF64
   | TBool
   | TChar
   | TArray Int Type 
@@ -245,6 +251,9 @@ data Pat
 -- Clauses (Case branches)
 data Clause = Clause (Bind Pat Exp)
   deriving (Show, Generic, Typeable)
+
+clause :: Pat -> Exp -> Clause
+clause p e = Clause (bind p e)
 
 exClauseBody :: Fresh m => Clause -> m Exp
 exClauseBody (Clause bnd)

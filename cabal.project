@@ -1,4 +1,5 @@
-packages: lltt/
+packages: language-syntax/
+          lltt/
           lltt-llvm/
           stlc/
           systemf/

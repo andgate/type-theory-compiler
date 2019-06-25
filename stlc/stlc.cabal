@@ -14,6 +14,8 @@ maintainer:          gabe4k@gmail.com
 -- copyright:
 -- category:
 extra-source-files:  CHANGELOG.md
+                     src/Language/STLC/Lex.x
+                     src/Language/STLC/Parse.y
 
 library
   exposed-modules:     Language.STLC.CConv
@@ -30,11 +32,22 @@ library
                        Language.STLC.TypeCheck
   -- other-modules:
   -- other-extensions:
-  build-depends:       lltt,
+  build-depends:       language-syntax,
+                       lltt,
+                       array,
                        base ^>=4.12.0.0,
+                       binary,
                        containers,
+                       extra,
+                       filepath,
+                       microlens-platform,
                        mtl,
                        prettyprinter,
+                       text,
                        unbound-generics
+
+  build-tools:
+      alex ==3.2.4, happy==1.19.9
+
   hs-source-dirs:      src
   default-language:    Haskell2010

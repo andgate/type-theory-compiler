@@ -18,7 +18,7 @@ extra-source-files:  CHANGELOG.md
 
 executable ttc
   main-is:             Main.hs
-  -- other-modules:
+  other-modules:       Compiler
   -- other-extensions:
   build-depends:       lltt,
                        lltt-llvm,
@@ -27,6 +27,7 @@ executable ttc
                        containers,
                        llvm-hs,
                        llvm-hs-pure,
+                       optparse-applicative,
                        prettyprinter,
                        unbound-generics,
                        text

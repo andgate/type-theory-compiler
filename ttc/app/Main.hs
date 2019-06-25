@@ -1,10 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE ApplicativeDo              #-}
 module Main where
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
+import Data.List
+import Data.Maybe (fromMaybe)
+
 import qualified Data.Text.IO as T
+
+import Compiler
 
 import Language.STLC.Desugar
 import Language.STLC.Match
@@ -26,6 +33,8 @@ import Data.Text.Prettyprint.Doc (Pretty (..))
 import Data.Text.Prettyprint.Doc.Render.Text (hPutDoc)
 
 import System.IO
+import Options.Applicative
+
 
 mallocExtern = ExternDefn $ Extern "malloc" [TI32] (TPtr TI8)
 freeExtern = ExternDefn $ Extern "free" [TPtr TI8] (TVoid)
@@ -167,20 +176,20 @@ testSource
             , freeExtern
             , memcpyExtern
             , putsExtern
-            --, derefIntFunc
+            , derefIntFunc
             , maybeIntType
-            --, iVector3Type
+            , iVector3Type
             , nothingFunc
             , just5Func
-            --, dotFunc
-            --, exMaybeFunc
-            --, addFunc
-            --, mulFunc
-            --, constFunc
-            --, idFunc
-            --, idMaybeFunc
-            --, addMulFunc
-            --, maybeAddMulFunc
+            , dotFunc
+            , exMaybeFunc
+            , addFunc
+            , mulFunc
+            , constFunc
+            , idFunc
+            , idMaybeFunc
+            , addMulFunc
+            , maybeAddMulFunc
             , mainFunc
             ]
 
@@ -211,13 +220,37 @@ compileModule fp modl = do
   LLVM.withContext $ \c -> LLVM.withModuleFromAST c llvmir (LLVM.writeLLVMAssemblyToFile (LLVM.File (fp ++ ".ll")))
 
 
--- TODO!
--- Make this read files using optApplicative.
--- Build Env from files and flags, then
--- compile with Env.
--- Have options for printing different phases
--- and stuff.
--- This requires parsing. Once this is done,
--- we can do golden testing.
+
+data Options
+  = Options { optInputs :: [String]
+            , optOutput :: String
+            , optOutputIR :: Bool
+            }
+  deriving (Eq, Show)
+
+options :: Parser Options
+options = do
+  optOutputIR <- switch
+                  ( long "output-ir"
+                  <> help "Output all ir representations" )
+  optOutput <- strOption
+                  ( long "output"
+                  <> short 'o'
+                  <> metavar "FILE"
+                  <> value "a.out"
+                  <> help "Write output to FILE" )
+  optInputs <- many (argument str idm)
+  pure Options {..}
+
+mkCompiler :: Options -> Compiler
+mkCompiler Options {..}
+  = Compiler { cInputs = optInputs
+             , cOutput = optOutput
+             , cOutputIR = optOutputIR
+             }
+
+opts :: ParserInfo Options
+opts = info (options <**> helper) idm
+
 main :: IO ()
-main = compileModule "test" testSource
+main = execParser opts >>= runCompiler . mkCompiler
