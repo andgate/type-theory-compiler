@@ -8,20 +8,19 @@
   #-}
 module Language.STLC.Lex.Format where
 
-import Control.Lens
+import Lens.Micro.Platform
 import Control.Monad (when, unless, void)
 import Control.Monad.State.Strict (State, evalState)
-import Language.Hawk.Lex.Result (LxResult (..), lxTokens)
-import Language.Hawk.Lex.Token
-import Language.Hawk.Syntax.Location (Loc(..), Region, locReg, regStart, posColumn)
+import Language.STLC.Lex.Token
+import Language.Syntax.Location (Loc(..), Region, locReg, regStart, posColumn)
 import Safe (headDef)
 
 import qualified Data.Map.Strict as Map
-import qualified Language.Hawk.Syntax.Location  as L
+import qualified Language.Syntax.Location  as L
 
 
 blkTriggers :: [TokenClass]
-blkTriggers = [TokenRsvp ":=", TokenRsvp "do", TokenRsvp "where", TokenRsvp "let"]
+blkTriggers = [TokenRsvp "of", TokenRsvp "let"]
 
 blkEndTriggers :: [TokenClass]
 blkEndTriggers = [TokenRsvp "in"]
@@ -76,7 +75,7 @@ mkLayout input = LayoutState  "" mempty [defCell] False input [] []
 -- Since this was originally implemented with conduit, using recursion in a state monad that
 -- maintains input/out lists was easier.
 layout :: [Token] -> [Token]
-layout toks = evalState layoutDriver (mkLayout toks)
+layout toks = mconcat $ reverse $ evalState layoutDriver (mkLayout toks)
 
 
 layoutDriver :: Layout [[Token]]
@@ -124,7 +123,7 @@ yieldTok t = do
 
    -- Is it time to split it up?
   when (isTopLevelLine || isEof)
-       $ do ts <- uses layToks' reverse
+       $ do ts <- reverse <$> use layToks'
             layResults %= (ts:)
             layToks' .= []
   where
@@ -186,7 +185,7 @@ closeBlk :: Layout ()
 closeBlk = do
   -- Peek two cells off the stack
   (Cell i1 ct1) <- peekCell
-  (Cell i2 ct2) <- uses layStack (headDef defCell . tail)
+  (Cell i2 ct2) <- (headDef defCell . tail) <$> use layStack
 
   -- Close twice when there is a linefold followed by a block that isn't root
   when (ct1 == LineFold && ct2 == Block && i2 /= 0)
@@ -235,7 +234,7 @@ popCell = do
 
 peekCell :: Layout Cell
 peekCell = 
-  uses layStack (headDef defCell)
+  headDef defCell <$> use layStack
 
     
 openTok :: Loc -> Cell -> Token

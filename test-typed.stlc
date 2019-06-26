@@ -1,16 +1,16 @@
 module Test
 
-extern malloc : I32 -> I8*
+extern malloc : I32 -> *I8
 
-extern free : I8* -> Void
+extern free : *I8 -> Void
 
-extern memcpy : I8* -> I8* -> I32 -> I8*
+extern memcpy : *I8 -> *I8 -> I32 -> *I8
 
 extern puts : String -> I32
 
-derefInt : I32* -> I32
-derefInt (a : I32*)
-  = &(a : I32*) : I32
+derefInt : *I32 -> I32
+derefInt (a : *I32)
+  = &(a : *I32) : I32
 
 type MaybeInt
   = Nothing 
@@ -23,9 +23,9 @@ nothing : MaybeInt
 nothing =
   Nothing : MaybeInt
 
-just5 : MaybeInt*
+just5 : *MaybeInt
 just5 =
-  new Just 5 : I32 : MaybeInt*
+  new Just 5 : I32 : *MaybeInt
 
 dot : IVector3 -> IVector3 -> I32
 dot (v1 : IVector3) (v2 : IVector3)
@@ -74,8 +74,8 @@ idMaybe (x : MaybeInt)
 
 addMul : I32 -> I32 -> I32 -> I32
 addMul (a : I32) (b : I32) (c : I32)
-  = (let d : I32 = (add : I32 -> I32 -> I32) (a : I32) (b : I32) : I32
-         e : I32 = (mul : I32 -> I32 -> I32) (d : I32) (c : I32) : I32
+  = (let d : I32 = add (a : I32) (b : I32) : I32
+         e : I32 = mul (d : I32) (c : I32) : I32
     in (id : I32 -> I32) (e : I32) : I32) : I32
 
 maybeAddMul : MaybeInt -> MaybeInt -> MaybeInt -> MaybeInt
@@ -101,12 +101,12 @@ maybeAddMul (may_a : MaybeInt) (may_b : MaybeInt) (may_c : MaybeInt)
           ) : MaybeInt
       ) : MaybeInt
 
-main : I32 -> I8** -> I32
-main (argc : I32) (argv : I8**)
+main : I32 -> **I8 -> I32
+main (argc : I32) (argv : **I8)
   = (let hello : String = "Hello World" : String
          five : String = "5" : String
-         may_5_ptr : MaybeInt* = just5 : MaybeInt*
-         may_5 : MaybeInt = &(may_5_ptr : MaybeInt*) : MaybeInt
+         may_5_ptr : *MaybeInt = just5 : *MaybeInt
+         may_5 : MaybeInt = &(may_5_ptr : *MaybeInt) : MaybeInt
          may_not : MaybeInt = nothing : MaybeInt
     in (case may_5 : MaybeInt of
       (Nothing : MaybeInt) ->

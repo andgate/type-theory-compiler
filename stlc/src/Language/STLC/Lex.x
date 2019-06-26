@@ -26,6 +26,7 @@ import Language.STLC.Lex.Error
 import Language.STLC.Lex.State
 import Language.STLC.Lex.Token
 import Language.Syntax.Location
+import Safe (headDef)
 import System.FilePath (FilePath)
 
 import qualified Data.Map            as Map
@@ -85,6 +86,7 @@ hawk :-
 
   \\                              { rsvp }
   \-\>                            { rsvp }
+  \|                              { rsvp }
   \:                              { rsvp }
   \:\:                            { rsvp }
   \;                              { rsvp }
@@ -105,34 +107,24 @@ hawk :-
   \<                              { rsvp }
   \>                              { rsvp }
 
-  "Type"                          { rsvp }
-  "Void"                          { rsvp }
+  "I8"                            { rsvp }
   "I32"                           { rsvp }
+  "I64"                           { rsvp }
+  "F32"                           { rsvp }
+  "F64"                           { rsvp }
+  "Bool"                          { rsvp }
+  "Char"                          { rsvp }
+  "Array"                         { rsvp }
+  "String"                        { rsvp }
+  "Void"                          { rsvp }
 
   "module"                        { rsvp }
   "import"                        { rsvp }
 
+  "extern"                        { rsvp }
   "type"                          { rsvp }
   "class"                         { rsvp }
   "impl"                          { rsvp }
-
-  "if"                            { rsvp }
-  "elif"                          { rsvp }
-  "else"                          { rsvp }
-  "case"                          { rsvp }
-
-  "try"                           { rsvp }
-  "catch"                         { rsvp }
-  "finally"                       { rsvp }
-
-  "return"                        { rsvp }
-  "break"                         { rsvp }
-  "continue"                      { rsvp }
-
-  "with"                          { rsvp }
-  "do"                            { rsvp }
-  "while"                         { rsvp }
-  "for"                           { rsvp }
 
   "foreign"                       { rsvp }
   "export"			                  { rsvp }
@@ -143,12 +135,18 @@ hawk :-
   "infixr"                        { rsvp }
 
   "let"                           { rsvp }
-  "static"                        { rsvp }
-  "inline"                        { rsvp }
+  "in"                            { rsvp }
   "as"                            { rsvp }
+  "case"                          { rsvp }
+  "of"                            { rsvp }
+
+  "if"                            { rsvp }
+  "then"                          { rsvp }
+  "elif"                          { rsvp }
+  "else"                          { rsvp }
 
   "new"                           { rsvp }
-  "newer"                         { rsvp }
+  "resize"                        { rsvp }
   "delete"                        { rsvp }
 
   "True"                          { \text -> yieldTokAt (TokenBool True) text}
@@ -438,7 +436,7 @@ lex fp text = do
             fp <- use lexFilePath
             r  <- use lexRegion
             let l = Loc fp r
-            throwError $ UnproducibleToken (show cs) l
+            throwError $ UnrecognizedToken (headDef (show p) $ words $ show text) l
 
         AlexSkip  input' len           -> do
             throwError IllegalLexerSkip

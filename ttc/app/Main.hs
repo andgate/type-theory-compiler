@@ -34,7 +34,7 @@ import Data.Text.Prettyprint.Doc.Render.Text (hPutDoc)
 
 import System.IO
 import Options.Applicative
-
+{-
 
 mallocExtern = ExternDefn $ Extern "malloc" [TI32] (TPtr TI8)
 freeExtern = ExternDefn $ Extern "free" [TPtr TI8] (TVoid)
@@ -218,7 +218,7 @@ compileModule fp modl = do
 
   let llvmir = genModule envEmpty lltc
   LLVM.withContext $ \c -> LLVM.withModuleFromAST c llvmir (LLVM.writeLLVMAssemblyToFile (LLVM.File (fp ++ ".ll")))
-
+-}
 
 
 data Options

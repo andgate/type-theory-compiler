@@ -78,8 +78,8 @@ instance Pretty Type where
       | isAType ty -> pretty ty <> brackets (pretty i)
       | True       -> parens (pretty ty) <> brackets (pretty i)
     TPtr ty 
-      | isAType ty -> pretty ty <> "*"
-      | True       -> parens (pretty ty) <> "*"
+      | isAType ty -> "*" <> pretty ty
+      | True       -> "*" <> parens (pretty ty)
     TString -> "String"
     TVoid -> "Void"
 

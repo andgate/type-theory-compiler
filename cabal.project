@@ -1,4 +1,5 @@
-packages: language-syntax/
+packages: language-module-system/
+          language-syntax/
           lltt/
           lltt-llvm/
           stlc/

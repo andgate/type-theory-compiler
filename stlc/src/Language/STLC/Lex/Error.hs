@@ -7,7 +7,7 @@ import Data.Text (Text, pack)
 import Data.Text.Prettyprint.Doc
 
 data LexError
-  = UnproducibleToken String Loc
+  = UnrecognizedToken String Loc
   | InvalidCharLit Text
   | IllegalLexerSkip
   deriving(Show)
@@ -15,11 +15,11 @@ data LexError
 
 instance Pretty LexError where
     pretty = \case
-      UnproducibleToken cs l  ->
-          pretty "Lexer has failed on"
-            <+> dquotes (pretty cs)
-            <+> pretty "at"
-            <+> pretty l
+      UnrecognizedToken cs l  ->
+        vsep [ pretty "Lexer has encountered an unrecognized token: "
+                   <+> pretty cs
+             , pretty "at" <+> pretty l
+             ]
 
       IllegalLexerSkip  ->
           pretty "Lexer performed an illegal skip operation."

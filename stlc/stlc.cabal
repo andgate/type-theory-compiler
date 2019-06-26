@@ -21,10 +21,15 @@ library
   exposed-modules:     Language.STLC.CConv
                        Language.STLC.Desugar
                        Language.STLC.Lex
+                       Language.STLC.Lex.Error
+                       Language.STLC.Lex.Format
+                       Language.STLC.Lex.State
+                       Language.STLC.Lex.Token
                        Language.STLC.Lift
                        Language.STLC.Match
                        Language.STLC.Namecheck
                        Language.STLC.Parse
+                       Language.STLC.Parse.Error
                        Language.STLC.Partial
                        Language.STLC.Pretty
                        Language.STLC.Reduce
@@ -32,7 +37,8 @@ library
                        Language.STLC.TypeCheck
   -- other-modules:
   -- other-extensions:
-  build-depends:       language-syntax,
+  build-depends:       language-module-system,
+                       language-syntax,
                        lltt,
                        array,
                        base ^>=4.12.0.0,
@@ -43,6 +49,7 @@ library
                        microlens-platform,
                        mtl,
                        prettyprinter,
+                       safe,
                        text,
                        unbound-generics
 

@@ -9,10 +9,11 @@ import Language.STLC.Syntax
 import Language.Syntax.Location
 
 import Data.Text (Text, unpack)
+import Data.Text.Prettyprint.Doc
 
 }
 
-%name parseTopLevel module_doc
+%name parseModule module_doc
 %tokentype { Token }
 %error { parseError }
 
@@ -20,7 +21,7 @@ import Data.Text (Text, unpack)
 %token
   '\\'               { Token (TokenRsvp "\\") _ $$ }
   '->'               { Token (TokenRsvp "->") _ $$ }
-  '|'                { Token (TokenRsvp "|00") _ $$ }
+  '|'                { Token (TokenRsvp "|") _ $$ }
   ':'                { Token (TokenRsvp ":") _ $$ }
   ','                { Token (TokenRsvp ",") _ $$ }
   '.'                { Token (TokenRsvp ".") _ $$ }
@@ -38,16 +39,20 @@ import Data.Text (Text, unpack)
   '['                { Token (TokenRsvp "[") _ $$ }
   ']'                { Token (TokenRsvp "]") _ $$ }
 
-  I32ty              { Token (TokenRsvp "I32" ) _ $$ }
-  I8ty               { Token (TokenRsvp "I8" ) _ $$ }
-  Boolty             { Token (TokenRsvp "Bool" ) _ $$ }
-  Charty             { Token (TokenRsvp "Char" ) _ $$ }
-  ArrayTy            { Token (TokenRsvp "Array" ) _ $$ }
-  StringTy           { Token (TokenRsvp "String" ) _ $$ }
-  Voidty             { Token (TokenRsvp "Void") _ $$ }
+  'I8'               { Token (TokenRsvp "I8" ) _ $$ }
+  'I32'              { Token (TokenRsvp "I32" ) _ $$ }
+  'I64'              { Token (TokenRsvp "I64" ) _ $$ }
+  'F32'              { Token (TokenRsvp "F32" ) _ $$ }
+  'F64'              { Token (TokenRsvp "F64" ) _ $$ }
+  'Bool'             { Token (TokenRsvp "Bool" ) _ $$ }
+  'Char'             { Token (TokenRsvp "Char" ) _ $$ }
+  'Array'            { Token (TokenRsvp "Array" ) _ $$ }
+  'String'           { Token (TokenRsvp "String" ) _ $$ }
+  'Void'             { Token (TokenRsvp "Void") _ $$ }
 
   'let'              { Token (TokenRsvp "let"   ) _ $$ }
   'in'               { Token (TokenRsvp "in"   ) _ $$ }
+  'as'               { Token (TokenRsvp "as"   ) _ $$ }
   'case'             { Token (TokenRsvp "case"   ) _ $$ }
   'of'               { Token (TokenRsvp "of"   ) _ $$ }
 
@@ -56,9 +61,9 @@ import Data.Text (Text, unpack)
   'else'             { Token (TokenRsvp "else"   ) _ $$ }
   'elif'             { Token (TokenRsvp "elif"   ) _ $$ }
 
-  New                { Token (TokenRsvp "new"  ) _ $$ }
-  Resize             { Token (TokenRsvp "resize") _ $$ }
-  Free               { Token (TokenRsvp "free") _ $$ }
+  'new'              { Token (TokenRsvp "new"  ) _ $$ }
+  'resize'           { Token (TokenRsvp "resize") _ $$ }
+  'delete'           { Token (TokenRsvp "delete") _ $$ }
 
   'module'           { Token (TokenRsvp "module") _ $$ }
   'import'           { Token (TokenRsvp "import") _ $$ }
@@ -69,13 +74,13 @@ import Data.Text (Text, unpack)
   varId              { Token (TokenVarId  _) _ _ }
   conId              { Token (TokenConId  _) _ _ }
 
-  primAdd            { Token (TokenPrimId "#add") _ $$ }
-  primSub            { Token (TokenPrimId "#sub") _ $$ }
-  primMul            { Token (TokenPrimId "#mul") _ $$ }
+  '#add'             { Token (TokenPrimId "#add") _ $$ }
+  '#sub'             { Token (TokenPrimId "#sub") _ $$ }
+  '#mul'             { Token (TokenPrimId "#mul") _ $$ }
 
-  primFAdd            { Token (TokenPrimId "#fadd") _ $$ }
-  primFSub            { Token (TokenPrimId "#fsub") _ $$ }
-  primFMul            { Token (TokenPrimId "#fmul") _ $$ }
+  '#fadd'            { Token (TokenPrimId "#fadd") _ $$ }
+  '#fsub'            { Token (TokenPrimId "#fsub") _ $$ }
+  '#fmul'            { Token (TokenPrimId "#fmul") _ $$ }
 
   integer            { Token (TokenInteger _) _ _ }
   double             { Token (TokenDouble  _) _ _ }
@@ -128,8 +133,8 @@ literal
 -- -----------------------------------------------------------------------------
 -- | Definitions
 
-module_doc :: { (String, [Defn]) }
-module_doc : module_defn defns { ($1, $2) } 
+module_doc :: { Module }
+module_doc : module_defn defns0 { Module $1 $2 } 
 
 module_defn :: { String }
 module_defn : begin_line 'module' mod_name end_line { $3 }  
@@ -144,14 +149,18 @@ defns : defns_r { reverse $1 }
 
 defns_r :: { [Defn] }
 defns_r
-  : begin_line defn end_line { [$2] }
-  | defns_r defn { $2 : $1 }
+  : defn_ln { [$1] }
+  | defns_r defn_ln { $2 : $1 }
+
+defn_ln :: { Defn }
+defn_ln
+  : begin_line defn end_line { $2 }
 
 defn :: { Defn }
 defn
-  : func_defn_typed     { FuncDefn $1 }
-  | extern_defn   { ExternDefn $1 }
-  | datatype_defn { DataTypeDefn $1 }
+  : func_defn_typed   { FuncDefn $1 }
+  | extern_defn       { ExternDefn $1 }
+  | datatype_defn     { DataTypeDefn $1 }
 
 
 -- -----------------------------------------------------------------------------
@@ -235,11 +244,10 @@ constr :: { (String, [(Maybe String, Type)]) }
 constr : con_name constr_body { ($1, $2) }
 
 constr_body :: { [(Maybe String, Type)] }
-constr_body : constr_types0 { $1 }
+constr_body : {- Empty -}   { [] }
+            | constr_types  { $1 }
             | record_decl   { $1 }
 
-constr_types0 :: { [(Maybe String, Type)] }
-constr_types0 : { [] } | constr_types { $1 } 
 
 constr_types :: { [(Maybe String, Type)] }
 constr_types : constr_types_rev { reverse $1 }
@@ -319,12 +327,18 @@ bexp :: { Exp }
 bexp
   : aexp aexps { EApp $1 $2 }
   | con_name aexps0 { ECon $1 $2 }
+  | 'new' con_name aexps0 { ENewCon $2 $3 }
+  | 'delete' aexp { EFree $2 }
   | aexp { $1 }
 
 aexp :: { Exp }
-aexp : var_name    { evar $1 }
-     | literal     { ELit $1 }
-     | '(' exp ')' { $2 }
+aexp : var_name          { evar $1 }
+     | literal           { ELit $1 }
+     | primOp            { EOp $1 }
+     | '*' aexp          { ERef $2 }
+     | '&' aexp          { EDeref $2 }
+     | aexp '.' var_name { EGet $1 $3 }
+     | '(' exp ')'       { $2 }
 
 aexps0 :: { [Exp] }
 aexps0
@@ -341,6 +355,15 @@ aexps_r
   | aexps_r aexp { $2:$1}
 
 
+primOp :: { Op }
+primOp
+  : '#add' aexp aexp { OpAddI $2 $3 }
+  | '#sub' aexp aexp { OpSubI $2 $3 }
+  | '#mul' aexp aexp { OpMulI $2 $3 }
+  | '#fadd' aexp aexp { OpAddF $2 $3 }
+  | '#fsub' aexp aexp { OpSubF $2 $3 }
+  | '#fmul' aexp aexp { OpMulF $2 $3 }
+
 -- -----------------------------------------------------------------------------
 -- | Types
 
@@ -354,6 +377,8 @@ btype
 
 atype :: { Type }
 atype : con_name     { TCon $1 }
+      | primType     { $1 }
+      | '*' atype    { TPtr $2 }
       | '(' type ')' { $2 }
 
 atypes :: { [Type] }
@@ -366,8 +391,22 @@ atypes_r
   | atypes_r atype { $2:$1 }
 
 
+primType :: { Type }
+primType
+  : 'I8' { TI8 }
+  | 'I32' { TI32 }
+  | 'I64' { TI64 }
+  | 'F32' { TF32 }
+  | 'F64' { TF64 }
+  | 'Bool' { TBool }
+  | 'Char' { TChar }
+  | 'String' { TString }
+  | 'Void' { TVoid }
+
 {
 
 parseError :: [Token] -> a
-parseError _ = error "Parse error yeeet"
+parseError [] = error "Parse error, no tokens left!!"
+parseError (t:_) = error $ "Parse error on token: " ++ show (pretty t)
+
 }
