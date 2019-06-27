@@ -26,16 +26,19 @@ You will need llvm-8 and the latest ghc/cabal for compiling haskell.
 Also, you should run `cabal update` to ensure you have the freshest
 set of packages for haskell.
 
-## Running the test
+## Running tests
 
-The current test compiler is tcc. Simply call `cabal new-run tcc`.
-This will run some tests and produce an llvm ir file, `test.ll`.
-You can then compile this file with `clang -O1 test.ll -o test`, and this
-will produce a binary executable, which you can run with `./test`.
+To run tests, run the command `cabal new-test ttc-golden`.
 
-The script `runtest.sh` can do this for you and even produces optimized
-llvm ir code in the file `test.ll.opt`.
+## Building files
 
+Currently, only `.stlc` files are supported. To build files,
+use the command:
+```
+cabal new-run ttc -- [-o outfile] infile..
+```
+If the build succeeds, you may execute the outfile.
+The default outfile is `a.out`.
 
 ## Languages
 
