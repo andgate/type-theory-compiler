@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 module Compiler where
 
 import Control.Monad.Except
@@ -27,21 +28,38 @@ import Data.Text.Prettyprint.Doc.Render.Text (putDoc, hPutDoc)
 
 import System.IO
 import System.FilePath
+import System.Directory
+import System.Process (callCommand, waitForProcess)
+import System.Exit (exitWith, ExitCode(..), die)
+
 
 data Compiler =
   Compiler
     { cInputs :: [String]
     , cOutput :: String
     , cOutputIR :: Bool
+    , cBuildDir :: FilePath
     }
     deriving (Show)
 
 data SrcFile = SrcFile FilePath String
 
-runCompiler :: Compiler -> IO ()
-runCompiler c =
-  mapM_ compileSTLC (cInputs c) 
+mkCompiler :: Compiler
+mkCompiler
+  = Compiler
+      { cInputs = ["main.stlc"]
+      , cOutput = "a.out"
+      , cOutputIR = False
+      , cBuildDir = "./"
+      }
 
+runCompiler :: Compiler -> IO ()
+runCompiler Compiler{..} = do
+  createDirectoryIfMissing True cBuildDir
+  createDirectoryIfMissing True (takeDirectory cOutput)
+  llmodules <- mapM (compileSTLC cBuildDir) cInputs
+  callCommand $ "clang-8 " <> unwords llmodules <> " -o " <> cOutput
+ 
 lexSTLC :: FilePath -> String -> [STLC.Token]
 lexSTLC fp c =
   case runExcept $ STLC.lex fp (pack c) of
@@ -50,23 +68,27 @@ lexSTLC fp c =
 
     Right toks -> STLC.layout toks
 
-compileSTLC :: String -> IO ()
-compileSTLC fp = do
-  toks <- (lexSTLC fp) <$> readFile fp
-  putDoc $ pretty toks
+compileSTLC :: String -> String -> IO String
+compileSTLC build_dir in_fp = do
+  toks <- (lexSTLC in_fp) <$> readFile in_fp
+  -- putDoc $ pretty toks <> line
   let stlc = STLC.parseModule toks
 
+  let build_fp = build_dir <> takeBaseName in_fp
+
   let stlc' = STLC.checkModule stlc
-  withFile (dropExtension fp ++ "-typed.stlc") WriteMode $ \h -> 
+  withFile (build_fp <> ".stlc.typed") WriteMode $ \h ->
     hPutDoc h $ pretty stlc'
   
   --let stlc'' = matchModule stlc'
-  --withFile (dropExtension fp ++ "-matched.stlc") WriteMode $ \h -> 
+  --withFile (build_fp <> ".stlc.matched") WriteMode $ \h -> 
   --  hPutDoc h $ pretty stlc''
 
   let lltc = STLC.desugarModule stlc'
-  withFile (replaceExtension fp "lltt") WriteMode $ \h -> 
+  withFile (build_fp <> ".lltt") WriteMode $ \h -> 
     hPutDoc h $ pretty lltc
 
   let llvmir = LL.genModule LL.envEmpty lltc
-  LLVM.withContext $ \c -> LLVM.withModuleFromAST c llvmir (LLVM.writeLLVMAssemblyToFile (LLVM.File (fp ++ ".ll")))
+  LLVM.withContext $ \c -> LLVM.withModuleFromAST c llvmir (LLVM.writeLLVMAssemblyToFile (LLVM.File (build_fp <> ".ll")))
+
+  return (build_fp <> ".ll")

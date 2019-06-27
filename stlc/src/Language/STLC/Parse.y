@@ -96,11 +96,6 @@ import Data.Text.Prettyprint.Doc
 
   EOF                { Token TokenEof _ _ }
 
-
-%nonassoc IFX
-%nonassoc Elif
-%nonassoc Else
-
 %%
 
 -- -----------------------------------------------------------------------------
@@ -134,7 +129,11 @@ literal
 -- | Definitions
 
 module_doc :: { Module }
-module_doc : module_defn defns0 { Module $1 $2 } 
+module_doc : module_defn defns0 mayeof { Module $1 $2 }
+
+mayeof :: { Maybe Token }
+mayeof : {- Empty -} { Nothing }
+       | EOF         { Just $1 }
 
 module_defn :: { String }
 module_defn : begin_line 'module' mod_name end_line { $3 }  

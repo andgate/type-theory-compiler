@@ -18,6 +18,9 @@ import Safe (headDef)
 import qualified Data.Map.Strict as Map
 import qualified Language.Syntax.Location  as L
 
+import Debug.Trace
+import Data.Text.Prettyprint.Doc
+
 
 blkTriggers :: [TokenClass]
 blkTriggers = [TokenRsvp "of", TokenRsvp "let"]
@@ -81,6 +84,13 @@ layout toks = mconcat $ reverse $ evalState layoutDriver (mkLayout toks)
 layoutDriver :: Layout [[Token]]
 layoutDriver = do
   ts <- use layToks
+  ts' <- use layToks'
+  stk <- use layStack
+  r <- use layResults
+  trace ("layToks:\n" ++ show (vsep (pretty <$> ts)) ++ "\n") $ return ()
+  trace ("layToks':\n" ++ show (vsep (pretty <$> ts')) ++ "\n\n") $ return ()
+  trace ("layStack:\n" ++ show stk ++ "\n") $ return ()
+  trace ("layResults:\n" ++ show (vsep (pretty <$> r)) ++ "\n\n") $ return ()
   case ts of
     (t:ts') -> do
       layToks .= ts'
@@ -88,7 +98,9 @@ layoutDriver = do
       handleTok t
       layoutDriver
 
-    [] -> use layResults
+    [] -> do
+      closeStack
+      use layResults
 
 
 handleTok :: Token -> Layout ()
@@ -121,17 +133,17 @@ yieldTok :: Token -> Layout ()
 yieldTok t = do
   layToks' %= (t:)
 
+  d <- length <$> use layStack
+  let isTopLevel = (d == 1) && (t^.tokClass == TokenLn')
+      isEof = (t^.tokClass == TokenEof)
+
    -- Is it time to split it up?
-  when (isTopLevelLine || isEof)
+  when (isTopLevel || isEof)
        $ do ts <- reverse <$> use layToks'
             layResults %= (ts:)
             layToks' .= []
-  where
-    isTopLevelLine
-      = (t^.regStart.posColumn == 0) && (t^.tokClass == TokenLn')
 
-    isEof
-      = t^.tokClass == TokenEof
+    
 
 
 closeStack :: Layout ()
@@ -175,8 +187,8 @@ close = do
   cl <- peekCell
   fp <- use layFilePath
   r <- use layRegion
-  yieldTok $ closeTok (Loc fp r) cl
   void popCell
+  yieldTok $ closeTok (Loc fp r) cl
 
 
 -- | This will close a block layout, if there is one.

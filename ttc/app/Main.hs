@@ -225,6 +225,7 @@ data Options
   = Options { optInputs :: [String]
             , optOutput :: String
             , optOutputIR :: Bool
+            , optBuildDir :: FilePath
             }
   deriving (Eq, Show)
 
@@ -239,18 +240,25 @@ options = do
                   <> metavar "FILE"
                   <> value "a.out"
                   <> help "Write output to FILE" )
+  optBuildDir <- strOption
+                  ( long "build-dir"
+                  <> metavar "FILE"
+                  <> value "./"
+                  <> help "Write build output to FILE" )
   optInputs <- many (argument str idm)
   pure Options {..}
 
-mkCompiler :: Options -> Compiler
-mkCompiler Options {..}
-  = Compiler { cInputs = optInputs
-             , cOutput = optOutput
-             , cOutputIR = optOutputIR
-             }
+opt2c :: Options -> Compiler
+opt2c Options {..}
+  = mkCompiler
+      { cInputs = optInputs
+      , cOutput = optOutput
+      , cOutputIR = optOutputIR
+      , cBuildDir = optBuildDir
+      }
 
 opts :: ParserInfo Options
 opts = info (options <**> helper) idm
 
 main :: IO ()
-main = execParser opts >>= runCompiler . mkCompiler
+main = execParser opts >>= runCompiler . opt2c

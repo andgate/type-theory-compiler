@@ -41,7 +41,7 @@ import LLVM.IRBuilder.Instruction
 import System.IO.Unsafe
 
 log :: String -> a -> a
-log msg a = unsafePerformIO (putStrLn msg) `seq` a
+log msg a = a -- unsafePerformIO (putStrLn msg) `seq` a
 
 
 data Env = Env { envTypes     :: Map String Type
