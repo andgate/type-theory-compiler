@@ -1,0 +1,29 @@
+module Main
+
+extern int2str : I32 -> String -> String
+extern puts : String -> I32
+
+fact : I32 -> I32
+fact n = fact' n 1
+
+fact' : I32 -> I32 -> I32
+fact' n x = 
+  if #eq n 0
+    then x
+    else fact' (#sub n 1) (#mul n x)
+
+main : I32 -> **I8 -> I32
+main argc argv =
+  let y1 = fact 1
+      y2 = fact 2
+      y3 = fact 3
+      y4 = fact 4
+      s1 = String 1
+      s2 = String 1
+      s3 = String 1
+      s4 = String 2
+      _ = puts (int2str y1 s1)
+      _ = puts (int2str y2 s2)
+      _ = puts (int2str y3 s3)
+      _ = puts (int2str y4 s4)
+  in 0

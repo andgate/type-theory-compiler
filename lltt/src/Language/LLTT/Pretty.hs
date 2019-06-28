@@ -204,6 +204,8 @@ instance Pretty Exp where
 instance Pretty Lit where
   pretty = \case
     LInt i -> pretty i
+    LDouble d -> pretty d
+    LBool b -> pretty b
     LChar c -> squotes $ pretty c
     LString str -> dquotes $ pretty str
     LStringI i -> "String" <> brackets (pretty i)
@@ -225,32 +227,42 @@ instance Pretty Op where
     OpAddI a b ->
       let a' = wrapBExp a
           b' = wrapBExp b
-      in hsep ["add", a', b']
+      in hsep ["#add", a', b']
 
     OpSubI a b ->
       let a' = wrapBExp a
           b' = wrapBExp b
-      in hsep ["sub", a', b']
+      in hsep ["#sub", a', b']
 
     OpMulI a b ->
       let a' = wrapBExp a
           b' = wrapBExp b
-      in hsep ["mul", a', b']
+      in hsep ["#mull", a', b']
     
     OpAddF a b ->
       let a' = wrapBExp a
           b' = wrapBExp b
-      in hsep ["addf", a', b']
+      in hsep ["#fadd", a', b']
 
     OpSubF a b ->
       let a' = wrapBExp a
           b' = wrapBExp b
-      in hsep ["subf", a', b']
+      in hsep ["#fsub", a', b']
 
     OpMulF a b ->
       let a' = wrapBExp a
           b' = wrapBExp b
-      in hsep ["mulf", a', b']
+      in hsep ["#fmul", a', b']
+
+    OpEqI a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["#eq", a', b']
+
+    OpNeqI a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["#neq", a', b']
 
 
 -----------------------------------------------------------------------
@@ -262,6 +274,10 @@ instance Pretty Type where
     TCon n -> pretty n
     TI8 -> "I8"
     TI32 -> "I32"
+    TI64 -> "I64"
+    TF32 -> "F32"
+    TF64 -> "F64"
+    TBool -> "TBool"
     TArray i ty 
       | isAType ty -> pretty ty <> brackets (pretty i)
       | True       -> parens (pretty ty) <> brackets (pretty i)
@@ -397,6 +413,11 @@ isAType = \case
   TCon _ -> True
   TI8 -> True
   TI32 -> True
+  TI64 -> True
+  TF32 -> True
+  TF64 -> True
+  TBool -> True
+  TChar -> True
   TArray _ _ -> True
   TPtr _ -> True
   TString -> True

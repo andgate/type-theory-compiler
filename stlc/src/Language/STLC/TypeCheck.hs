@@ -449,27 +449,23 @@ tcElse (Elif p t f) (Just ty)
 
 tcOp :: MonadTc m => Op -> Maybe Type -> m Exp
 tcOp op mty = case op of
-  OpAddI a b -> tcBOpI OpAddI a b mty
-  OpSubI a b -> tcBOpI OpMulI a b mty
-  OpMulI a b -> tcBOpI OpMulI a b mty
+  OpAddI a b -> tcBOp OpAddI a b mty TI32 TI32
+  OpSubI a b -> tcBOp OpSubI a b mty TI32 TI32
+  OpMulI a b -> tcBOp OpMulI a b mty TI32 TI32
+  OpEqI  a b -> tcBOp OpEqI  a b mty TI32 TBool
 
   OpAddF a b -> error "Floating point unsupported"
   OpSubF a b -> error "Floating point unsupported"
   OpMulF a b -> error "Floating point unsupported"
 
 
-tcBOpI :: MonadTc m  => (Exp -> Exp -> Op) -> Exp -> Exp -> Maybe Type
-       -> m Exp
-tcBOpI constr a b Nothing = 
-  tcBOpI constr a b (Just TI32)
-
-tcBOpI constr a b (Just TI32) = do
-  op' <- constr <$> checkType a TI32 <*> checkType b TI32
-  return $ EType (EOp op') TI32
-
-tcBOpI constr a b (Just ty)
-  = error $ "Operation expected I32 type, instead had " ++ show ty ++ "\n\n"
-         ++ "Operation: " ++ show (constr a b)
+tcBOp :: MonadTc m  => (Exp -> Exp -> Op) -> Exp -> Exp
+                    -> Maybe Type -> Type -> Type -> m Exp
+tcBOp constr a b Nothing paramty retty = 
+  tcBOp constr a b (Just retty) paramty retty
+tcBOp constr a b (Just retty') paramty retty = do
+  op' <- constr <$> checkType a paramty <*> checkType b paramty
+  return $ EType (EOp op') (unify retty retty')
 
 
 tcPat :: MonadTc m => Pat -> Maybe Type  -> m Pat

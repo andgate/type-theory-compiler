@@ -87,10 +87,10 @@ layoutDriver = do
   ts' <- use layToks'
   stk <- use layStack
   r <- use layResults
-  trace ("layToks:\n" ++ show (vsep (pretty <$> ts)) ++ "\n") $ return ()
-  trace ("layToks':\n" ++ show (vsep (pretty <$> ts')) ++ "\n\n") $ return ()
-  trace ("layStack:\n" ++ show stk ++ "\n") $ return ()
-  trace ("layResults:\n" ++ show (vsep (pretty <$> r)) ++ "\n\n") $ return ()
+  -- trace ("layToks:\n" ++ show (vsep (pretty <$> ts)) ++ "\n") $ return ()
+  -- trace ("layToks':\n" ++ show (vsep (pretty <$> ts')) ++ "\n\n") $ return ()
+  -- trace ("layStack:\n" ++ show stk ++ "\n") $ return ()
+  -- trace ("layResults:\n" ++ show (vsep (pretty <$> r)) ++ "\n\n") $ return ()
   case ts of
     (t:ts') -> do
       layToks .= ts'

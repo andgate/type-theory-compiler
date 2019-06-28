@@ -123,6 +123,9 @@ data Op
   | OpAddF Exp Exp
   | OpSubF Exp Exp
   | OpMulF Exp Exp
+
+  | OpEqI Exp Exp
+  | OpNeqI Exp Exp
   deriving (Show, Generic, Typeable)
 
 
@@ -170,8 +173,18 @@ instance Eq Type where
     (TArr a1 a2, TArr b1 b2) -> (a1 == b1) && (a2 == b2)
     (TCon n1, TCon n2) -> n1 == n2
     
+    
     (TI8, TI8)   -> True
     (TI32, TI32) -> True
+    (TI64, TI64) -> True
+    (TF32, TF32) -> True
+    (TF64, TF64) -> True
+
+    (TBool, TBool) -> True
+
+    (TChar, TChar) -> True
+    (TI8, TChar) -> True
+    (TChar, TI8) -> True
 
     (TArray i1 t1, TArray i2 t2) -> (i1 == i2) && (t1 == t2) 
     (TPtr t1, TPtr t2) -> t1 == t2
@@ -220,10 +233,8 @@ unify (TArray n t1) (TPtr t2)
 unify (TPtr TI8) TString = TString
 unify TString (TPtr TI8) = TString
 
-unify (TArray n t1) (TPtr t2)
-  | t1 == t2 = TPtr t2
-  | otherwise = unify_err (TArray n t1) (TPtr t2)
-
+unify TI8 TChar = TChar
+unify TChar TI8 = TChar
 
 unify t1 t2
   | t1 == t2 = t2
@@ -232,8 +243,8 @@ unify t1 t2
 
 unify_err :: Type -> Type -> Type
 unify_err t1 t2 = error $ "Type mismatch!\n"
-                     ++ "Expected:\t" ++ show t1 ++ "\n"
-                     ++ "Actual:\t" ++ show t2 ++ "\n"
+                     ++ "Expected: " ++ show t1 ++ "\n"
+                     ++ "Actual: " ++ show t2 ++ "\n"
 
 
 

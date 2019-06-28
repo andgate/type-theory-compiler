@@ -74,6 +74,11 @@ instance Pretty Type where
     TCon n -> pretty n
     TI8 -> "I8"
     TI32 -> "I32"
+    TI64 -> "I64"
+    TF32 -> "F32"
+    TF64 -> "F64"
+    TBool -> "Bool"
+    TChar -> "Char"
     TArray i ty 
       | isAType ty -> pretty ty <> brackets (pretty i)
       | True       -> parens (pretty ty) <> brackets (pretty i)
@@ -301,12 +306,22 @@ instance PrettyFresh Op where
     OpAddI a b -> do
       a' <- wrapBExpFresh a
       b' <- wrapBExpFresh b
-      return $ hsep ["add", a', b']
+      return $ hsep ["#add", a', b']
+
+    OpSubI a b -> do
+      a' <- wrapBExpFresh a
+      b' <- wrapBExpFresh b
+      return $ hsep ["#sub", a', b']
 
     OpMulI a b -> do
       a' <- wrapBExpFresh a
       b' <- wrapBExpFresh b
-      return $ hsep ["mul", a', b']
+      return $ hsep ["#mul", a', b']
+
+    OpEqI a b -> do
+      a' <- wrapBExpFresh a
+      b' <- wrapBExpFresh b
+      return $ hsep ["#eq", a', b']
 
 
 -----------------------------------------------------------------------
@@ -387,6 +402,11 @@ isAType = \case
   TCon _ -> True
   TI8 -> True
   TI32 -> True
+  TI64 -> True
+  TF32 -> True
+  TF64 -> True
+  TBool -> True
+  TChar -> True
   TArray _ _ -> True
   TPtr _ -> True
   TString -> True

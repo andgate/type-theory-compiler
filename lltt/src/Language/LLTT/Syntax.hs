@@ -43,7 +43,7 @@ data DataType =
 
 sizeDataType :: Map String Int -> DataType -> Int
 sizeDataType sizes (DataType _ cs) =
-  maximum [sum [sizeType sizes ty | (_, ty) <- ps] | (_, ps) <- cs]
+  maximum [sum [sizeType sizes ty | (_, ty) <- ps] | ((_, ps)) <- cs]
 
 sizeType :: Map String Int -> Type -> Int
 sizeType sizes = \case
@@ -53,6 +53,11 @@ sizeType sizes = \case
   TVar _ -> 8
   TI8 -> 1
   TI32 -> 4
+  TI64 -> 8
+  TF32 -> 4
+  TF64 -> 8
+  TBool -> 1
+  TChar -> 1
   TArray n ty -> n + sizeType sizes ty
   TPtr _ -> 8
   TString -> 8
@@ -98,6 +103,8 @@ data Exp
 -- Literals
 data Lit
   = LInt Int
+  | LDouble Double
+  | LBool Bool
   | LChar Char
   | LString String
   | LStringI Int
@@ -120,6 +127,8 @@ data Op
   | OpAddF Exp Exp
   | OpSubF Exp Exp
   | OpMulF Exp Exp
+  | OpEqI Exp Exp
+  | OpNeqI Exp Exp
   deriving(Show)
 
 
@@ -132,6 +141,10 @@ data Type
   | TCon String
   | TI8
   | TI32
+  | TI64
+  | TF32
+  | TF64
+  | TBool
   | TChar
   | TArray Int Type
   | TPtr Type

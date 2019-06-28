@@ -85,7 +85,7 @@ desugarExp' ty = \case
     body' <- desugarExp body
     return $ LL.ELet (NE.fromList rhs) body'
 
-  EIf p t f -> undefined
+  EIf p t f -> LL.EIf <$> desugarExp p <*> desugarExp t <*> desugarElse f
 
   ECase e@(EType _ TI32) cls -> do
     error "Integer case not supported"
@@ -123,18 +123,29 @@ desugarExp' ty = \case
 desugarLit :: Fresh m => Lit -> m LL.Lit
 desugarLit = \case
   LInt i     -> pure $ LL.LInt i
+  LDouble d  -> pure $ LL.LDouble d
   LChar c    -> pure $ LL.LChar c
+  LBool b    -> pure $ LL.LBool b
   LString s  -> pure $ LL.LString s
   LStringI i ->
     case reduceBy mempty 50 i of
+      EType (ELit (LInt i)) _ -> return $ LL.LStringI i
       ELit (LInt i) -> return $ LL.LStringI i
-      _ -> error "desugar - expected constant integer!"
+      _ -> error $ "desugar - expected constant integer! Found: " ++ show i
 
   LArray xs  -> LL.LArray   <$> mapM desugarExp xs
   LArrayI i  ->
     case reduceBy mempty 50 i of
+      EType (ELit (LInt i)) _ -> return $ LL.LArrayI i
       ELit (LInt i) -> return $ LL.LArrayI i
-      _ -> error "desugar - expected constant integer!"
+      _ -> error $ "desugar - expected constant integer! Found: " ++ show i
+
+
+desugarElse :: Fresh m => Else -> m LL.Else
+desugarElse = \case
+  Else e -> LL.Else <$> desugarExp e
+  Elif p t f -> LL.Elif <$> desugarExp p <*> desugarExp t <*> desugarElse f
+
 
 desugarOp :: Fresh m => Op -> m LL.Op
 desugarOp = \case
@@ -146,6 +157,9 @@ desugarOp = \case
   OpSubF a b -> LL.OpSubF <$> desugarExp a <*> desugarExp b
   OpMulF a b -> LL.OpMulF <$> desugarExp a <*> desugarExp b
 
+  OpEqI a b -> LL.OpEqI <$> desugarExp a <*> desugarExp b
+  OpNeqI a b -> LL.OpNeqI <$> desugarExp a <*> desugarExp b
+
 desugarType :: Type -> LL.Type
 desugarType = \case
   ty@(TArr a b) ->
@@ -155,6 +169,10 @@ desugarType = \case
   TCon n  -> LL.TCon n
   TI8     -> LL.TI8
   TI32    -> LL.TI32
+  TI64    -> LL.TI64
+  TF32    -> LL.TF32
+  TF64    -> LL.TF64
+  TBool   -> LL.TBool
   TChar   -> LL.TChar
   TArray i ty -> LL.TArray i (desugarType ty)
   TPtr ty -> LL.TPtr (desugarType ty)

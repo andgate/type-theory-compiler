@@ -82,6 +82,9 @@ import Data.Text.Prettyprint.Doc
   '#fsub'            { Token (TokenPrimId "#fsub") _ $$ }
   '#fmul'            { Token (TokenPrimId "#fmul") _ $$ }
 
+  '#eq'              { Token (TokenPrimId "#eq") _ $$ }
+  '#neq'             { Token (TokenPrimId "#neq") _ $$ }
+
   integer            { Token (TokenInteger _) _ _ }
   double             { Token (TokenDouble  _) _ _ }
   char               { Token (TokenChar    _) _ _ }
@@ -122,6 +125,7 @@ literal
   | double   { LDouble (unL $ extractDouble  $1) }
   | char     { LChar   (unL $ extractChar    $1) }
   | string   { LString (unL $ extractString  $1) }
+  | 'String' aexp { LStringI $2 }
   | boolean  { LBool   (unL $ extractBool    $1) }
 
 
@@ -362,6 +366,8 @@ primOp
   | '#fadd' aexp aexp { OpAddF $2 $3 }
   | '#fsub' aexp aexp { OpSubF $2 $3 }
   | '#fmul' aexp aexp { OpMulF $2 $3 }
+  | '#eq'   aexp aexp { OpEqI $2 $3 }
+  | '#neq'  aexp aexp { OpNeqI $2 $3 }
 
 -- -----------------------------------------------------------------------------
 -- | Types

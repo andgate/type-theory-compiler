@@ -58,7 +58,7 @@ runCompiler Compiler{..} = do
   createDirectoryIfMissing True cBuildDir
   createDirectoryIfMissing True (takeDirectory cOutput)
   llmodules <- mapM (compileSTLC cBuildDir) cInputs
-  callCommand $ "clang-8 " <> unwords llmodules <> " -o " <> cOutput
+  callCommand $ "clang-8 rts.c " <> unwords llmodules <> " -o " <> cOutput
  
 lexSTLC :: FilePath -> String -> [STLC.Token]
 lexSTLC fp c =
