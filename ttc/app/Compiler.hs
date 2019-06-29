@@ -17,7 +17,8 @@ import Language.LLTT.Pretty
 import qualified Language.LLTT.LLVM.Codegen as LL
 
 import qualified LLVM.Module as LLVM
-import qualified LLVM.Internal.Context as LLVM
+import qualified LLVM.Target as LLVM
+import qualified LLVM.Context as LLVM
 import qualified LLVM.AST as AST
 
 import Unbound.Generics.LocallyNameless
@@ -90,8 +91,14 @@ compileSTLC build_dir in_fp = do
 
   let llvmir = LL.genModule LL.envEmpty lltc
       irfp = build_fp <> ".ll"
-  LLVM.withContext $ \c -> LLVM.withModuleFromAST c llvmir (LLVM.writeLLVMAssemblyToFile (LLVM.File irfp))
+  LLVM.withContext $ \c ->
+    LLVM.withModuleFromAST c llvmir $ \m -> do
+      LLVM.writeLLVMAssemblyToFile (LLVM.File irfp) m
+      LLVM.withHostTargetMachine $ \t -> do
+        LLVM.writeTargetAssemblyToFile t (LLVM.File $ build_fp <> ".s") m
+        LLVM.writeObjectToFile t (LLVM.File $ build_fp <> ".o") m
 
-  callCommand $ "clang-8 -O2 -S -emit-llvm " <> irfp <> " -o " <> irfp <> ".opt"
+  callCommand $ "clang-8 -O1 -S -emit-llvm " <> irfp <> " -o " <> irfp <> ".opt1"
+  callCommand $ "clang-8 -O2 -S -emit-llvm " <> irfp <> " -o " <> irfp <> ".opt2"
 
-  return irfp
+  return (build_fp <> ".o")

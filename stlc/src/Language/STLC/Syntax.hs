@@ -227,14 +227,18 @@ unify (TPtr t1) (TArray n t2)
   | otherwise = unify_err (TPtr t1) (TArray n t2)
 
 unify (TArray n t1) (TPtr t2)
-  | t1 == t2 = TArray n t2
+  | t1 == t2 = TPtr t2
   | otherwise = unify_err (TArray n t1) (TPtr t2)
 
 unify (TPtr TI8) TString = TString
-unify TString (TPtr TI8) = TString
+unify TString (TPtr TI8) = TPtr TI8
 
 unify TI8 TChar = TChar
-unify TChar TI8 = TChar
+unify TChar TI8 = TI8
+
+unify (TPtr t1) (TPtr t2)
+  | t1 == t2 = TPtr (unify t1 t2)
+  | otherwise = unify_err (TPtr t1) (TPtr t2)
 
 unify t1 t2
   | t1 == t2 = t2

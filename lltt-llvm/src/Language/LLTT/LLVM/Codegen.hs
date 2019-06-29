@@ -493,7 +493,34 @@ genExp' env rty = \case
     return lhs_ptr'
 
 
-  LL.ENewArray xs -> undefined
+  LL.ENewArray xs -> mdo
+    br newarr_stage_blk
+    newarr_stage_blk <- block `named` "newarray.stage"
+    let ty = LL.exType $ head xs 
+    x_ptrs' <- mapM (genExp env) xs
+    br newarr_alloc_blk
+
+    newarr_alloc_blk <- block `named` "newarray.alloc"
+    i8_ptr_ptr <- alloca (Ty.ptr Ty.i8) Nothing 4
+    arr_ptr_ptr <- bitcast i8_ptr_ptr (Ty.ptr $ genType env rty)
+    br newarr_call_blk
+
+    newarr_call_blk <- block `named` "newarray.call"
+    let f = envLookupFunc "malloc" env
+        s = LL.sizeType (envSizes env) ty 
+    xs' <- mapM (`load` 4) x_ptrs'
+    r <- call f [(ConstantOperand $ C.Int 32 (toInteger $ s * length xs), [])]
+    
+    store i8_ptr_ptr 4 r
+    arr_ptr <- load arr_ptr_ptr 4
+    mapM_ (\(x, i) -> do 
+                  e <- gep arr_ptr [ConstantOperand $ C.Int 32 (toInteger i)]
+                  store e 4 x
+          ) (zip xs' [0..])
+
+    return arr_ptr_ptr
+
+
   LL.ENewArrayI i -> mdo
     br newstr_stage_blk
     newstr_stage_blk <- block `named` "newarray.stage"

@@ -100,6 +100,10 @@ data Exp
   | EOp Op
   deriving(Show)
 
+exType :: Exp -> Type
+exType (EType _ ty) = ty
+exType e = error $ "Expected typed expression, found: " ++ show e 
+
 -- Literals
 data Lit
   = LInt Int

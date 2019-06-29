@@ -119,6 +119,8 @@ desugarExp' ty = \case
 
   ESet lhs rhs -> LL.ESet <$> desugarExp lhs <*> desugarExp rhs
 
+  ENewArray xs -> LL.ENewArray <$> mapM desugarExp xs
+
   ENewArrayI i -> LL.ENewArrayI <$> desugarExp i
 
   ENewStringI i -> LL.ENewStringI <$> desugarExp i

@@ -335,6 +335,7 @@ bexp
   | 'new' con_name aexps0 { ENewCon $2 $3 }
   | 'new' 'String' aexp { ENewStringI $3 }
   | 'new' '[' ']' aexp { ENewArrayI $4 }
+  | 'new' '[' exp_list ']' { ENewArray $3 }
   | 'delete' aexp { EFree $2 }
   | aexp { $1 }
 
@@ -345,7 +346,8 @@ aexp : var_name          { evar $1 }
      | '&' aexp          { ERef $2 }
      | '*' aexp          { EDeref $2 }
      | aexp '.' var_name { EGet $1 $3 }
-     | aexp '[' aexp ']' { EGetI $1 $3 }
+     | aexp '[' exp ']'  { EGetI $1 $3 }
+     | '[' exp_list ']'  { ELit (LArray $2) }
      | '(' exp ')'       { $2 }
 
 aexps0 :: { [Exp] }
@@ -361,6 +363,14 @@ aexps_r :: { [Exp] }
 aexps_r
   : aexp         { [$1] }
   | aexps_r aexp { $2:$1}
+
+exp_list :: { [Exp] }
+exp_list : exp_list_r { reverse $1 }
+
+exp_list_r :: { [Exp] }
+exp_list_r
+  : exp                { [$1] }
+  | exp_list_r ',' exp { $3:$1 }
 
 
 primOp :: { Op }

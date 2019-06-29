@@ -129,7 +129,7 @@ tcExp :: MonadTc m => Exp -> Maybe Type -> m Exp
 -- Expression Variables
 tcExp e@(EVar v) Nothing = EType e <$> lookupType (name2String v)
 tcExp e@(EVar v) (Just ty) = do
-  (EType e . unify ty) <$> lookupType (name2String v)
+  (EType e . (`unify` ty)) <$> lookupType (name2String v)
 
 -- Expression Literals
 tcExp (ELit l) mty = tcLit l mty
@@ -292,23 +292,22 @@ tcExp (ENewArray (e:es)) Nothing = do
   e' <- inferType e
   let ety = exType e'
   es' <- mapM (`checkType` ety) es
-  return $ EType (ENewArray (e':es')) (TPtr $ TArray (length es) ety)
+  return $ EType (ENewArray (e':es')) (TPtr ety)
 
-
-tcExp (ENewArray es) (Just ty@(TPtr (TPtr ety))) = do
+tcExp (ENewArray es) (Just ty@(TPtr ety)) = do
   es' <- mapM (`checkType` ety) es
-  return $ EType (ENewArray es') (TPtr (TArray (length es) ety))
+  return $ EType (ENewArray es') (TPtr ety)
 
-tcExp (ENewArray es) (Just ty@(TPtr (TArray i ety)))
+tcExp (ENewArray es) (Just ty@(TArray i ety))
   | length es /= i = error $ "Array type and size mismatch!"
   | otherwise = do
       es' <- mapM (`checkType` ety) es
-      return $ EType (ENewArray es') ty
+      return $ EType (ENewArray es') (TPtr ety)
 
 tcExp (ENewArray es) (Just ty)
   = error $ "Type mismatch!\n\n"
-         ++ "Expected: " ++ show ty ++"\n\n"
-         ++ "Actual: *Array or **"
+         ++ "Expected: " ++ show ty ++ "\n"
+         ++ "Actual: *Array or **" ++ "\n\n"
 
 tcExp (ENewArrayI i) Nothing =
   error $ "Cannot infer type of new array, please provide type annotations."
@@ -399,12 +398,22 @@ tcLit (LStringI _) (Just ty)
   = error $ "Expected String type, found " ++ show (pretty ty)
 
 -- Arrays
-tcLit (LArray xs) Nothing
-  = error "Cannot infer array type. Please provide annotations." 
+tcLit (LArray []) Nothing
+  = error $ "Unable to infer type of empty array."
 
-tcLit (LArray xs) (Just (TArray n ty)) = do
+tcLit (LArray (x:xs)) Nothing = do
+  x' <- inferType x
+  let ty = exType x'
   xs' <- mapM (\x -> checkType x ty) xs
+  let n = length (x:xs)
   return $ EType (ELit $ LArray xs') (TArray n ty)
+
+tcLit (LArray xs) (Just (TArray n ty))
+  | length xs == n = do
+      xs' <- mapM (\x -> checkType x ty) xs
+      return $ EType (ELit $ LArray xs') (TArray n ty)
+  
+  | otherwise = error $ "Array length mismatch!"
 
 tcLit (LArray _) (Just ty)
   = error $ "Expected Array type, found " ++ show (pretty ty)

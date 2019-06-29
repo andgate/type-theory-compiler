@@ -1,0 +1,26 @@
+module Main
+
+extern int2str : I32 -> String -> String
+extern puts : String -> I32
+extern malloc : I32 -> *I8
+extern free : *I8 -> I8
+
+printArray : *I32 -> I32 -> I32
+printArray xs n = printArray1 xs n 0
+
+printArray1 : *I32 -> I32 -> I32 -> I32
+printArray1 xs n i = 
+  if #eq i n then 0 else
+  let _ = printInt xs[i] in
+  printArray1 xs n (#add i 1)
+
+printInt : I32 -> I32
+printInt x = 
+  let txt = int2str x (String 2)
+      _ = puts txt
+  in 0
+
+main : I32 -> **I8 -> I32
+main argc argv =
+  let a = new [1,2,3]
+  in printArray a 3
