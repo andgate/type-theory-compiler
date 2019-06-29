@@ -88,6 +88,7 @@ hawk :-
   \-\>                            { rsvp }
   \|                              { rsvp }
   \:                              { rsvp }
+  \:\=                            { rsvp }
   \:\:                            { rsvp }
   \;                              { rsvp }
   \,                              { rsvp }
@@ -303,10 +304,12 @@ handleChar text len = do
       yieldCharAt ch = yieldTokAt (TokenChar ch) text len
   case (trim text) of
       ([])   -> yieldCharAt '\0'
-      (c:_)  -> yieldCharAt '\n'
-      "\t"   -> yieldCharAt '\t'
-      "\r"   -> yieldCharAt '\r'
+      "\\0"   -> yieldCharAt '\0'
+      "\\t"   -> yieldCharAt '\t'
+      "\\n"   -> yieldCharAt '\n'
+      "\\r"   -> yieldCharAt '\r'
       "\'"   -> yieldCharAt '\''
+      (c:_)  -> yieldCharAt c
       _      -> throwError $ InvalidCharLit text
 
 

@@ -6,7 +6,7 @@ import Data.List
 import Test.Tasty (defaultMain, TestTree, testGroup)
 import Test.Tasty.Golden (goldenVsFile, findByExtension)
 
-import System.Directory (listDirectory, createDirectoryIfMissing, doesDirectoryExist)
+import System.Directory (listDirectory, removeDirectoryRecursive, createDirectoryIfMissing, doesDirectoryExist)
 import System.FilePath (takeBaseName, replaceExtension, (</>))
 import System.Process (callCommand, waitForProcess)
 
@@ -16,8 +16,23 @@ import System.Exit (exitWith, ExitCode(..), die)
 main :: IO ()
 main = defaultMain =<< goldenTests
 
+ifM :: Monad m => m Bool -> m () -> m ()
+ifM mp mt = do
+  p <- mp
+  if p then mt else return ()
+
+removeOldTests :: IO ()
+removeOldTests = do
+  ifM (doesDirectoryExist "tests/out")
+      (removeDirectoryRecursive "tests/out")
+  ifM (doesDirectoryExist "tests/build")
+      (removeDirectoryRecursive "tests/build")
+  ifM (doesDirectoryExist "tests/bin")
+      (removeDirectoryRecursive "tests/bin")
+
 goldenTests :: IO TestTree
 goldenTests = do
+  removeOldTests
   singleFileTests <- goldenTestSingle
   multiFileTests <- mempty -- goldenTestMulti
   return $ testGroup "TTC Golden Tests" (singleFileTests <> multiFileTests)

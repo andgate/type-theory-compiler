@@ -316,14 +316,15 @@ tcExp (ENewArrayI i) Nothing =
 -- Can't determine the value of i unless it's a constant.
 -- So can't return array, it has to be a double pointer.
 -- We'll solve this problem some other day.
-tcExp (ENewArrayI i) (Just ty@(TPtr (TPtr _))) = do
+
+tcExp (ENewArrayI i) (Just ty@(TPtr _)) = do
   i' <- checkType i TI32
   return $ EType (ENewArrayI i') ty
 
 tcExp (ENewArrayI i) (Just ty)
-  = error $ "Type mismatch on new array!\n\n"
-         ++ "Expected: " ++ show ty ++ "\n\n"
-         ++ "Actual: **x   (for some unknown x)"
+  = error $ "Type mismatch on new array!\n"
+         ++ "Expected: " ++ show ty ++ "\n"
+         ++ "Actual: *x   (for some unknown x)\n\n"
 
 tcExp (EResizeArray e i) Nothing = do  
   e' <- inferType e
@@ -351,6 +352,15 @@ tcExp (EResizeArray e i) (Just ty)
          ++ "Actual: **x   (for some unknown x)"
 
 
+tcExp (ENewStringI i) Nothing = do
+  i' <- checkType i TI32
+  return $ EType (ENewStringI i') TString
+
+tcExp (ENewStringI i) (Just ty) = do
+  i' <- checkType i TI32
+  return $ EType (ENewStringI i') (unify ty TString)
+
+
 -- Expression Operations
 tcExp (EOp op) mty = tcOp op mty
 
@@ -365,15 +375,15 @@ tcLit (LInt i) (Just ty)
                      ++ "Instead, found type " ++ show (pretty ty)
 
 tcLit (LChar c) Nothing = return $ EType (ELit $ LChar c) TChar
-tcLit (LChar c) (Just TChar) = return $ EType (ELit $ LChar c) TChar
-tcLit (LChar c) (Just ty)
-  = error $ "Expected Char type, found " ++ show (pretty ty)
+tcLit (LChar c) (Just ty) = return $ EType (ELit $ LChar c) (unify ty TChar)
 
 -- Strings
 tcLit (LString s) Nothing
   = return $ EType (ELit $ LString s) TString
 tcLit (LString s) (Just TString)
   = return $ EType (ELit $ LString s) TString
+tcLit (LString s) (Just (TPtr TI8))
+  = return $ EType (ELit $ LString s) (TPtr TI8)
 tcLit (LString s) (Just ty)
   = error $ "Expected String type, found " ++ show (pretty ty)
 

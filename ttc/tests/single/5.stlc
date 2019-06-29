@@ -1,0 +1,43 @@
+module Main
+
+extern int2str : I32 -> *I8 -> *I8
+extern puts : *I8 -> I32
+extern malloc : I32 -> *I8
+extern free : *I8 -> I8
+
+type Maybe = Nothing | Just I32
+
+addMaybe : Maybe -> Maybe -> Maybe
+addMaybe ma mb =
+  case ma of
+    Nothing -> Nothing
+    Just a ->
+      case mb of
+        Nothing -> Nothing
+        Just b -> Just (#add a b)
+
+printMaybe : Maybe -> I32
+printMaybe mx =
+  case mx of
+    Nothing -> puts "Nothing"
+    Just x  -> printInt x
+
+printInt : I32 -> I32
+printInt x = 
+  let txt = String 2
+      txt1 = int2str x txt
+      _ = puts txt1
+  in 0
+
+main : I32 -> **I8 -> I32
+main argc argv =
+  let m1 = Just 1
+      m2 = Just 2
+      m3 = Just 3
+      mn = Nothing
+      _ = printMaybe m3
+      _ = printMaybe (addMaybe m1 m3)
+      _ = printMaybe (addMaybe m2 m3)
+      _ = printMaybe (addMaybe m3 m3)
+      _ = printMaybe mn
+  in 0

@@ -115,6 +115,14 @@ desugarExp' ty = \case
   EGet e m ->
     LL.EGet <$> desugarExp e <*> pure m
 
+  EGetI e i -> LL.EGetI <$> desugarExp e <*> desugarExp i
+
+  ESet lhs rhs -> LL.ESet <$> desugarExp lhs <*> desugarExp rhs
+
+  ENewArrayI i -> LL.ENewArrayI <$> desugarExp i
+
+  ENewStringI i -> LL.ENewStringI <$> desugarExp i
+
   EOp op -> LL.EOp <$> desugarOp op
 
   e -> error $ "unhandled case: " ++ show e

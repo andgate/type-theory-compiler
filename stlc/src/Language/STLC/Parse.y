@@ -23,6 +23,7 @@ import Data.Text.Prettyprint.Doc
   '->'               { Token (TokenRsvp "->") _ $$ }
   '|'                { Token (TokenRsvp "|") _ $$ }
   ':'                { Token (TokenRsvp ":") _ $$ }
+  ':='               { Token (TokenRsvp ":=") _ $$ }
   ','                { Token (TokenRsvp ",") _ $$ }
   '.'                { Token (TokenRsvp ".") _ $$ }
   '='                { Token (TokenRsvp "=") _ $$ }
@@ -282,7 +283,7 @@ record_field
 -- | Expressions
 
 exp :: { Exp }
-exp : cexp { $1 }
+exp : dexp { $1 }
 
 dexp :: { Exp }
 dexp
@@ -291,10 +292,11 @@ dexp
 
 cexp :: { Exp }
 cexp
-  : 'let' equations 'in' cexp { elet $2 $4 }
+  : 'let' equations 'in' cexp   { elet $2 $4 }
   | 'if' bexp 'then' exp elsebr { EIf $2 $4 $5 }
-  | 'case' bexp 'of' clauses { ECase $2 $4 }
-  | '\\' apats '->' exp { elam $2 $4 } 
+  | 'case' bexp 'of' clauses    { ECase $2 $4 }
+  | '\\' apats '->' exp         { elam $2 $4 }
+  | bexp ':=' cexp              { ESet $1 $3 }
   | bexp { $1 }
 
 equations :: { [(Pat, Exp)] }
@@ -331,6 +333,8 @@ bexp
   : aexp aexps { EApp $1 $2 }
   | con_name aexps0 { ECon $1 $2 }
   | 'new' con_name aexps0 { ENewCon $2 $3 }
+  | 'new' 'String' aexp { ENewStringI $3 }
+  | 'new' '[' ']' aexp { ENewArrayI $4 }
   | 'delete' aexp { EFree $2 }
   | aexp { $1 }
 
@@ -338,9 +342,10 @@ aexp :: { Exp }
 aexp : var_name          { evar $1 }
      | literal           { ELit $1 }
      | primOp            { EOp $1 }
-     | '*' aexp          { ERef $2 }
-     | '&' aexp          { EDeref $2 }
+     | '&' aexp          { ERef $2 }
+     | '*' aexp          { EDeref $2 }
      | aexp '.' var_name { EGet $1 $3 }
+     | aexp '[' aexp ']' { EGetI $1 $3 }
      | '(' exp ')'       { $2 }
 
 aexps0 :: { [Exp] }
@@ -384,6 +389,7 @@ atype :: { Type }
 atype : con_name     { TCon $1 }
       | primType     { $1 }
       | '*' atype    { TPtr $2 }
+      | '[' integer type ']' { TArray (fromInteger $ unL $ extractInteger $2) $3 }
       | '(' type ')' { $2 }
 
 atypes :: { [Type] }

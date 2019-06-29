@@ -167,3 +167,14 @@ data Pat
 -- Case branches
 data Clause = Clause String [Maybe String] Exp
   deriving(Show)
+
+
+patFreeTyped :: Pat -> [(String, Type)]
+patFreeTyped (PType p ty) = patFreeTyped' ty p
+
+patFreeTyped' :: Type -> Pat -> [(String, Type)]
+patFreeTyped' ty = \case
+  PVar n -> [(n, ty)]
+  PCon n ps -> concatMap patFreeTyped ps
+  PWild -> []
+  PType p ty' -> patFreeTyped' ty' p

@@ -157,14 +157,14 @@ instance Pretty Exp where
     ERef e ->
       let e' = pretty e
       in if isAExp e
-          then "*" <> e'
-          else "*" <> parens e'
+          then "&" <> e'
+          else "&" <> parens e'
 
     EDeref e ->
       let e' = pretty e
       in if isAExp e
-          then "&" <> e'
-          else "&" <> parens e'
+          then "*" <> e'
+          else "*" <> parens e'
 
 
     ECon n [] -> pretty n
@@ -277,7 +277,8 @@ instance Pretty Type where
     TI64 -> "I64"
     TF32 -> "F32"
     TF64 -> "F64"
-    TBool -> "TBool"
+    TBool -> "Bool"
+    TChar -> "Char"
     TArray i ty 
       | isAType ty -> pretty ty <> brackets (pretty i)
       | True       -> parens (pretty ty) <> brackets (pretty i)

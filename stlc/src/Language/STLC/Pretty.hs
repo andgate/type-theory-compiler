@@ -173,14 +173,14 @@ instance PrettyFresh Exp where
     ERef e -> do
       e' <- prettyFresh e
       if isAExp e
-        then return $ "*" <> e'
-        else return $ "*" <> parens e'
+        then return $ "&" <> e'
+        else return $ "&" <> parens e'
 
     EDeref e -> do
       e' <- prettyFresh e
       if isAExp e
-        then return $ "&" <> e'
-        else return $ "&" <> parens e'
+        then return $ "*" <> e'
+        else return $ "*" <> parens e'
     
     ECon n [] ->
       return $ pretty n
@@ -245,7 +245,7 @@ instance PrettyFresh Lit where
     LString s -> return $ dquotes $ pretty s
     LStringI i -> do 
       i' <- prettyFresh i
-      return $ "String" <> brackets i'
+      return $ "String" <+> i'
 
     LArray es -> do
       es' <- mapM prettyFresh es
@@ -253,7 +253,7 @@ instance PrettyFresh Lit where
 
     LArrayI i -> do
       i' <- prettyFresh i
-      return $ "Array" <> brackets i'
+      return $ "Array" <+> i'
 
 instance PrettyFresh Else where
   prettyFresh = \case
