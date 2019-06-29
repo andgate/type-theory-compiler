@@ -5,6 +5,7 @@ extern puts : *I8 -> I32
 extern malloc : I32 -> *I8
 extern free : *I8 -> I8
 
+type Unit = Unit
 type Nat = Zero | Succ *Nat
 
 int2nat : I32 -> *Nat
@@ -23,20 +24,26 @@ nat2int n =
 sumN : *Nat -> *Nat -> *Nat
 sumN a b =
   case *a of
-    Zero -> b
-    Succ a1 -> sumN a1 (new Succ b)
+    Zero ->
+      case *b of
+        Zero -> new Zero
+        Succ b1 -> new Succ (sumN a b1)
+    Succ a1 -> new Succ (sumN a1 b)
+
+deleteNat : *Nat -> Unit
+deleteNat n =
+  case *n of
+    Zero    -> let _ = delete n in Unit
+    Succ n1 ->
+      let _ = delete n in
+      deleteNat n1
 
 
 printNat : *Nat -> I32
 printNat n = printInt (nat2int n)
 
 printInt : I32 -> I32
-printInt x = 
-  let txt = new [] 2 : *I8
-      txt1 = int2str x txt
-      _ = puts txt1
-      _ = delete txt1
-  in 0
+printInt x = puts (int2str x (String 2))
 
 main : I32 -> **I8 -> I32
 main argc argv =
@@ -46,4 +53,7 @@ main argc argv =
       _ = printNat x
       _ = printNat y
       _ = printNat z
+      _ = deleteNat x
+      _ = deleteNat y
+      _ = deleteNat z
   in 0

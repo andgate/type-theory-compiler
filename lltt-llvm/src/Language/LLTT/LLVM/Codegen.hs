@@ -474,7 +474,8 @@ genExp' env rty = \case
   LL.EFree e -> do
     let f = envLookupFunc "free" env
     e' <- loadExp env e
-    call f [(e', [])]
+    p' <- bitcast e' (Ty.ptr Ty.i8)
+    call f [(p', [])]
 
   LL.EGet e n -> do
     case envLookupMember n env of

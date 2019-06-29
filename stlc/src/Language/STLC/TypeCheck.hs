@@ -390,12 +390,9 @@ tcLit (LStringI i) Nothing = do
   i' <- checkType i TI32
   return $ EType (ELit $ LStringI i') TString
 
-tcLit (LStringI i) (Just TString) = do
+tcLit (LStringI i) (Just ty) = do
   i' <- checkType i TI32
-  return $ EType (ELit $ LStringI i') TString
-
-tcLit (LStringI _) (Just ty)
-  = error $ "Expected String type, found " ++ show (pretty ty)
+  return $ EType (ELit $ LStringI i') (unify TString (unify (TPtr TI8) ty))
 
 -- Arrays
 tcLit (LArray []) Nothing
