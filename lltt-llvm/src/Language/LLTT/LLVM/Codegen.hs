@@ -221,7 +221,8 @@ genExtern env (LL.Extern name argtys retty) =
 genDataType :: (MonadFix m, MonadModuleBuilder m) => Env -> Int -> LL.DataType -> m (String, Type, [(String, Type, [Type], [Maybe String])])
 genDataType env s dt@(LL.DataType n cons) = do
   ty <- typedef (str2Name n) (Just $ StructureType False [i8, ArrayType (fromIntegral s) i8] )
-  cons' <- mapM (genDataTypeCon env n) cons
+  let env' = envInsertTypeDef n ty env
+  cons' <- mapM (genDataTypeCon env' n) cons
   return (n, ty, cons')
 
 genDataTypeCon :: (MonadFix m, MonadModuleBuilder m) => Env -> String -> (String, [(Maybe String, LL.Type)]) -> m (String, Type, [Type], [Maybe String])
@@ -229,8 +230,8 @@ genDataTypeCon env dt_name (con_name, ty_params) = do
   let n = dt_name ++ "_" ++ con_name
       ty_params' = (genType env . snd) <$> ty_params
   (con_name,,,) <$> typedef (str2Name n) (Just $ StructureType True (i8 : ty_params') )
-               <*> pure ty_params'
-               <*> pure (fst <$> ty_params)
+                <*> pure ty_params'
+                <*> pure (fst <$> ty_params)
 
 genType :: Env -> LL.Type -> Type
 genType env = \case

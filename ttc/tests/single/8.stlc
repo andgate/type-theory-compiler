@@ -1,0 +1,49 @@
+module Main
+
+extern int2str : I32 -> *I8 -> *I8
+extern puts : *I8 -> I32
+extern malloc : I32 -> *I8
+extern free : *I8 -> I8
+
+type Nat = Zero | Succ *Nat
+
+int2nat : I32 -> *Nat
+int2nat x = 
+  if #eq x 0 then
+    new Zero
+  else
+    new Succ (int2nat (#sub x 1))
+
+nat2int : *Nat -> I32
+nat2int n =
+  case *n of
+    Zero -> 0
+    Succ n1 -> #add 1 (nat2int n1)
+
+sumN : *Nat -> *Nat -> *Nat
+sumN a b =
+  case *a of
+    Zero -> b
+    Succ a1 -> sumN a1 (new Succ b)
+
+
+printNat : *Nat -> I32
+printNat n = printInt (nat2int n)
+
+printInt : I32 -> I32
+printInt x = 
+  let txt = new [] 2 : *I8
+      txt1 = int2str x txt
+      _ = puts txt1
+      _ = delete txt1
+  in 0
+
+main : I32 -> **I8 -> I32
+main argc argv =
+  let x = int2nat 120
+      y = int2nat 340
+      z = sumN x y
+      _ = printNat x
+      _ = printNat y
+      _ = printNat z
+  in 0
