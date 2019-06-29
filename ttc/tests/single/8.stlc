@@ -43,12 +43,12 @@ printNat : *Nat -> I32
 printNat n = printInt (nat2int n)
 
 printInt : I32 -> I32
-printInt x = puts (int2str x (String 2))
+printInt x = puts (int2str x (String 11))
 
 main : I32 -> **I8 -> I32
 main argc argv =
-  let x = int2nat 120
-      y = int2nat 340
+  let x = int2nat 12929
+      y = int2nat 23232
       z = sumN x y
       _ = printNat x
       _ = printNat y
