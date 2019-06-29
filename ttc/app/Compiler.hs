@@ -89,7 +89,7 @@ compileSTLC build_dir in_fp = do
   withFile (build_fp <> ".lltt") WriteMode $ \h -> 
     hPutDoc h $ pretty lltc
 
-  let llvmir = LL.genModule LL.envEmpty lltc
+  let llvmir = LL.genModule LL.envEmpty in_fp lltc
       irfp = build_fp <> ".ll"
   LLVM.withContext $ \c ->
     LLVM.withModuleFromAST c llvmir $ \m -> do

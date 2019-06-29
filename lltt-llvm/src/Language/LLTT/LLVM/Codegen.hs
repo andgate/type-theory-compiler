@@ -138,15 +138,17 @@ envLookupMember :: String -> Env -> Maybe (Type, Int)
 envLookupMember mem_n env = Map.lookup mem_n (envMembers env)
 
 
-genModule :: Env -> LL.Module -> Module
-genModule env1 (LL.Module n defns)
-  = buildModule "exampleModule" $ mdo
-      env2 <- foldM genDecl env1 defns
-      ops <- mapM (genFunc env3) [f | (LL.FuncDefn f) <- defns]
-      let env3 = foldl' (\env (n, f, ty) ->
-                              envInsertFunc n f
-                            $ envInsertType n ty env) env2 ops
-      return ()
+genModule :: Env -> FilePath -> LL.Module -> Module
+genModule env1 srcfp (LL.Module n defns)
+  = m { moduleSourceFileName = str2sbs srcfp } 
+  where
+    m = buildModule (str2sbs n) $ mdo
+          env2 <- foldM genDecl env1 defns
+          ops <- mapM (genFunc env3) [f | (LL.FuncDefn f) <- defns]
+          let env3 = foldl' (\env (n, f, ty) ->
+                                  envInsertFunc n f
+                                $ envInsertType n ty env) env2 ops
+          return ()
 
 genFunc :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Func -> m (String, Operand, Type)
 genFunc env (LL.Func name args body@(LL.EType _ retty)) = do
