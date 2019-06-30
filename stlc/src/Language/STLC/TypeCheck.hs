@@ -472,12 +472,26 @@ tcOp op mty = case op of
   OpAddI a b -> tcBOp OpAddI a b mty TI32 TI32
   OpSubI a b -> tcBOp OpSubI a b mty TI32 TI32
   OpMulI a b -> tcBOp OpMulI a b mty TI32 TI32
-  OpEqI  a b -> tcBOp OpEqI  a b mty TI32 TBool
-  OpNeqI  a b -> tcBOp OpNeqI  a b mty TI32 TBool
+  OpDivI a b -> tcBOp OpDivI a b mty TI32 TI32
+  OpRemI a b -> tcBOp OpRemI a b mty TI32 TI32
 
-  OpAddF a b -> error "Floating point unsupported"
-  OpSubF a b -> error "Floating point unsupported"
-  OpMulF a b -> error "Floating point unsupported"
+  OpAddF a b -> tcBOp OpAddF a b mty TF64 TF64
+  OpSubF a b -> tcBOp OpSubF a b mty TF64 TF64
+  OpMulF a b -> tcBOp OpMulF a b mty TF64 TF64
+  OpDivF a b -> tcBOp OpDivF a b mty TF64 TF64
+  OpRemF a b -> tcBOp OpRemF a b mty TF64 TF64
+
+  OpAnd a b -> tcBOp OpAnd a b mty TBool TBool
+  OpOr  a b -> tcBOp OpOr  a b mty TBool TBool
+  OpXor a b -> tcBOp OpXor a b mty TBool TBool
+
+  OpEqI  a b -> tcBOp OpEqI  a b mty TI32 TBool
+  OpNeqI a b -> tcBOp OpNeqI a b mty TI32 TBool
+  
+  OpLT  a b -> tcBOp OpLT a b mty TI32 TBool
+  OpLE  a b -> tcBOp OpLE a b mty TI32 TBool
+  OpGT  a b -> tcBOp OpGT a b mty TI32 TBool
+  OpGE  a b -> tcBOp OpGE a b mty TI32 TBool
 
 
 tcBOp :: MonadTc m  => (Exp -> Exp -> Op) -> Exp -> Exp

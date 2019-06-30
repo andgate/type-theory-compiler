@@ -128,12 +128,27 @@ data Op
   = OpAddI Exp Exp
   | OpSubI Exp Exp
   | OpMulI Exp Exp
+  | OpDivI Exp Exp
+  | OpRemI Exp Exp
+  | OpNeg Exp
+  
   | OpAddF Exp Exp
   | OpSubF Exp Exp
   | OpMulF Exp Exp
+  | OpDivF Exp Exp
+  | OpRemF Exp Exp
+
+  | OpAnd Exp Exp
+  | OpOr  Exp Exp
+  | OpXor Exp Exp
+
   | OpEqI Exp Exp
   | OpNeqI Exp Exp
-  deriving(Show)
+  | OpLT Exp Exp
+  | OpLE Exp Exp
+  | OpGT Exp Exp
+  | OpGE Exp Exp
+  deriving (Show)
 
 
 ---------------------------------------------------------------------------

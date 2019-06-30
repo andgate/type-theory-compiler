@@ -317,6 +317,63 @@ instance PrettyFresh Op where
       a' <- wrapBExpFresh a
       b' <- wrapBExpFresh b
       return $ hsep ["#mul", a', b']
+    
+    OpDivI a b -> do
+      a' <- wrapBExpFresh a
+      b' <- wrapBExpFresh b
+      return $ hsep ["#div", a', b']
+    
+    OpRemI a b -> do
+      a' <- wrapBExpFresh a
+      b' <- wrapBExpFresh b
+      return $ hsep ["#rem", a', b']
+
+    OpNeg a  -> do
+      a' <- wrapBExpFresh a
+      return $ hsep ["#neg", a']
+
+
+    OpAddF a b -> do
+      a' <- wrapBExpFresh a
+      b' <- wrapBExpFresh b
+      return $ hsep ["#fadd", a', b']
+
+    OpSubF a b -> do
+      a' <- wrapBExpFresh a
+      b' <- wrapBExpFresh b
+      return $ hsep ["#fsub", a', b']
+
+    OpMulF a b -> do
+      a' <- wrapBExpFresh a
+      b' <- wrapBExpFresh b
+      return $ hsep ["#fmul", a', b']
+    
+    OpDivF a b -> do
+      a' <- wrapBExpFresh a
+      b' <- wrapBExpFresh b
+      return $ hsep ["#fdiv", a', b']
+    
+    OpRemF a b -> do
+      a' <- wrapBExpFresh a
+      b' <- wrapBExpFresh b
+      return $ hsep ["#rem", a', b']
+
+
+    OpAnd a b -> do
+      a' <- wrapBExpFresh a
+      b' <- wrapBExpFresh b
+      return $ hsep ["#and", a', b']
+
+    OpOr a b -> do
+      a' <- wrapBExpFresh a
+      b' <- wrapBExpFresh b
+      return $ hsep ["#or", a', b']
+
+    OpXor a b -> do
+      a' <- wrapBExpFresh a
+      b' <- wrapBExpFresh b
+      return $ hsep ["#xor", a', b']
+
 
     OpEqI a b -> do
       a' <- wrapBExpFresh a
@@ -328,6 +385,26 @@ instance PrettyFresh Op where
       b' <- wrapBExpFresh b
       return $ hsep ["#neq", a', b']
 
+
+    OpLT a b -> do
+      a' <- wrapBExpFresh a
+      b' <- wrapBExpFresh b
+      return $ hsep ["#lt", a', b']
+
+    OpLE a b -> do
+      a' <- wrapBExpFresh a
+      b' <- wrapBExpFresh b
+      return $ hsep ["#le", a', b']
+
+    OpGT a b -> do
+      a' <- wrapBExpFresh a
+      b' <- wrapBExpFresh b
+      return $ hsep ["#gt", a', b']
+
+    OpGE a b -> do
+      a' <- wrapBExpFresh a
+      b' <- wrapBExpFresh b
+      return $ hsep ["#ge", a', b']
 
 -----------------------------------------------------------------------
 -- Helpers

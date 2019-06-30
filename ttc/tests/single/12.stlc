@@ -1,0 +1,33 @@
+module Main
+
+extern printstr : *I8 -> I32
+extern printint : I32 -> I32
+
+type Unit = Unit
+
+fizzbuzz : I32 -> Unit
+fizzbuzz n = fizzbuzz' n 1
+
+fizzbuzz' : I32 -> I32 -> Unit
+fizzbuzz' n i =
+  let i' = #add i 1 in
+  if #eq n i then Unit
+  elif #and (#eq (#rem i 3) 0)
+            (#eq (#rem i 5) 0) then
+    let _ = printstr "fizzbuzz " in
+    fizzbuzz' n i'
+  elif #eq (#rem i 3) 0 then
+    let _ = printstr "fizz " in
+    fizzbuzz' n i'
+  elif #eq (#rem i 5) 0 then
+    let _ = printstr "buzz " in
+    fizzbuzz' n i'
+  else
+    let _ = printint i
+        _ = printstr " " in
+    fizzbuzz' n i'
+
+main : I32 -> **I8 -> I32
+main argc argv = 
+  let _ = fizzbuzz 100
+  in 0

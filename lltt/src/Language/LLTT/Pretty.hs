@@ -237,7 +237,21 @@ instance Pretty Op where
     OpMulI a b ->
       let a' = wrapBExp a
           b' = wrapBExp b
-      in hsep ["#mull", a', b']
+      in hsep ["#mul", a', b']
+
+    OpDivI a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["#div", a', b']
+
+    OpRemI a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["#rem", a', b']
+
+    OpNeg a ->
+      let a' = wrapBExp a
+      in hsep ["#neg", a']
     
     OpAddF a b ->
       let a' = wrapBExp a
@@ -254,6 +268,32 @@ instance Pretty Op where
           b' = wrapBExp b
       in hsep ["#fmul", a', b']
 
+    OpDivF a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["#fdiv", a', b']
+
+    OpRemF a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["#frem", a', b']
+
+    OpAnd a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["#and", a', b']
+
+    OpOr a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["#or", a', b']
+
+    OpXor a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["#xor", a', b']
+
+
     OpEqI a b ->
       let a' = wrapBExp a
           b' = wrapBExp b
@@ -263,6 +303,28 @@ instance Pretty Op where
       let a' = wrapBExp a
           b' = wrapBExp b
       in hsep ["#neq", a', b']
+
+
+    OpLT a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["#lt", a', b']
+
+    OpLE a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["#le", a', b']
+
+    OpGT a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["#gt", a', b']
+
+    OpGE a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["#ge", a', b']
+
 
 
 -----------------------------------------------------------------------

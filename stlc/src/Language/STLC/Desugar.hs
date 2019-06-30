@@ -162,13 +162,27 @@ desugarOp = \case
   OpAddI a b -> LL.OpAddI <$> desugarExp a <*> desugarExp b
   OpSubI a b -> LL.OpSubI <$> desugarExp a <*> desugarExp b
   OpMulI a b -> LL.OpMulI <$> desugarExp a <*> desugarExp b
+  OpDivI a b -> LL.OpDivI <$> desugarExp a <*> desugarExp b
+  OpRemI a b -> LL.OpRemI <$> desugarExp a <*> desugarExp b
+  OpNeg a -> LL.OpNeg <$> desugarExp a
 
   OpAddF a b -> LL.OpAddF <$> desugarExp a <*> desugarExp b
   OpSubF a b -> LL.OpSubF <$> desugarExp a <*> desugarExp b
   OpMulF a b -> LL.OpMulF <$> desugarExp a <*> desugarExp b
+  OpDivF a b -> LL.OpDivF <$> desugarExp a <*> desugarExp b
+  OpRemF a b -> LL.OpRemF <$> desugarExp a <*> desugarExp b
+  
+  OpAnd a b -> LL.OpAnd <$> desugarExp a <*> desugarExp b
+  OpOr  a b -> LL.OpOr <$> desugarExp a <*> desugarExp b
+  OpXor a b -> LL.OpXor <$> desugarExp a <*> desugarExp b
 
   OpEqI a b -> LL.OpEqI <$> desugarExp a <*> desugarExp b
   OpNeqI a b -> LL.OpNeqI <$> desugarExp a <*> desugarExp b
+
+  OpLT a b -> LL.OpLT <$> desugarExp a <*> desugarExp b
+  OpLE a b -> LL.OpLE <$> desugarExp a <*> desugarExp b
+  OpGT a b -> LL.OpGT <$> desugarExp a <*> desugarExp b
+  OpGE a b -> LL.OpGE <$> desugarExp a <*> desugarExp b
 
 desugarType :: Type -> LL.Type
 desugarType = \case

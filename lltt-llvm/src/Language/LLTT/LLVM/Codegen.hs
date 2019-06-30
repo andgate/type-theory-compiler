@@ -40,7 +40,7 @@ import qualified LLVM.AST.Constant as C
 import qualified LLVM.IRBuilder.Constant as C
 import LLVM.IRBuilder.Module
 import LLVM.IRBuilder.Monad
-import LLVM.IRBuilder.Instruction
+import LLVM.IRBuilder.Instruction as I
 import LLVM.IRBuilder.Extra
 
 import System.IO.Unsafe
@@ -680,13 +680,26 @@ genOp env = \case
   LL.OpAddI a b -> genBinaryOp env add LL.TI32 a b
   LL.OpSubI a b -> genBinaryOp env sub LL.TI32 a b
   LL.OpMulI a b -> genBinaryOp env mul LL.TI32 a b
+  LL.OpDivI a b -> genBinaryOp env sdiv LL.TI32 a b
+  LL.OpRemI a b -> genBinaryOp env urem LL.TI32 a b
 
-  LL.OpAddF a b -> genBinaryOp env fadd LL.TI32 a b
-  LL.OpSubF a b -> genBinaryOp env fsub LL.TI32 a b
-  LL.OpMulF a b -> genBinaryOp env fmul LL.TI32 a b
+  LL.OpAddF a b -> genBinaryOp env fadd LL.TF64 a b
+  LL.OpSubF a b -> genBinaryOp env fsub LL.TF64 a b
+  LL.OpMulF a b -> genBinaryOp env fmul LL.TF64 a b
+  LL.OpDivF a b -> genBinaryOp env fdiv LL.TF64 a b
+  LL.OpRemF a b -> genBinaryOp env frem LL.TF64 a b
+
+  LL.OpAnd a b -> genBinaryOp env I.and LL.TBool a b
+  LL.OpOr  a b -> genBinaryOp env I.or  LL.TBool a b
+  LL.OpXor a b -> genBinaryOp env I.xor LL.TBool a b
 
   LL.OpEqI a b -> genBinaryOp env (icmp AST.EQ) LL.TBool a b
   LL.OpNeqI a b -> genBinaryOp env (icmp AST.NE) LL.TBool a b
+
+  LL.OpLT a b -> genBinaryOp env (icmp AST.SLT) LL.TBool a b
+  LL.OpLE a b -> genBinaryOp env (icmp AST.SLE) LL.TBool a b
+  LL.OpGT a b -> genBinaryOp env (icmp AST.SGT) LL.TBool a b
+  LL.OpGE a b -> genBinaryOp env (icmp AST.SGE) LL.TBool a b
 
 
 genBinaryOp :: (MonadFix m, MonadModuleBuilder m)

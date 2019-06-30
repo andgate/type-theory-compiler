@@ -78,13 +78,27 @@ import Data.Text.Prettyprint.Doc
   '#add'             { Token (TokenPrimId "#add") _ $$ }
   '#sub'             { Token (TokenPrimId "#sub") _ $$ }
   '#mul'             { Token (TokenPrimId "#mul") _ $$ }
+  '#div'             { Token (TokenPrimId "#div") _ $$ }
+  '#rem'             { Token (TokenPrimId "#rem") _ $$ }
+  '#neg'             { Token (TokenPrimId "#nef") _ $$ }
 
   '#fadd'            { Token (TokenPrimId "#fadd") _ $$ }
   '#fsub'            { Token (TokenPrimId "#fsub") _ $$ }
   '#fmul'            { Token (TokenPrimId "#fmul") _ $$ }
+  '#fdiv'            { Token (TokenPrimId "#fdiv") _ $$ }
+  '#frem'            { Token (TokenPrimId "#frem") _ $$ }
+
+  '#and'             { Token (TokenPrimId "#and") _ $$ }
+  '#or'              { Token (TokenPrimId "#or") _ $$ }
+  '#xor'             { Token (TokenPrimId "#xor") _ $$ }
 
   '#eq'              { Token (TokenPrimId "#eq") _ $$ }
   '#neq'             { Token (TokenPrimId "#neq") _ $$ }
+  '#lt'              { Token (TokenPrimId "#lt") _ $$ }
+  '#le'              { Token (TokenPrimId "#le") _ $$ }
+  '#gt'              { Token (TokenPrimId "#gt") _ $$ }
+  '#ge'              { Token (TokenPrimId "#le") _ $$ }
+
 
   integer            { Token (TokenInteger _) _ _ }
   double             { Token (TokenDouble  _) _ _ }
@@ -379,11 +393,26 @@ primOp
   : '#add' aexp aexp { OpAddI $2 $3 }
   | '#sub' aexp aexp { OpSubI $2 $3 }
   | '#mul' aexp aexp { OpMulI $2 $3 }
+  | '#div' aexp aexp { OpDivI $2 $3 }
+  | '#rem' aexp aexp { OpRemI $2 $3 }
+  | '#neg' aexp { OpNeg $2 }
+
   | '#fadd' aexp aexp { OpAddF $2 $3 }
   | '#fsub' aexp aexp { OpSubF $2 $3 }
   | '#fmul' aexp aexp { OpMulF $2 $3 }
-  | '#eq'   aexp aexp { OpEqI $2 $3 }
-  | '#neq'  aexp aexp { OpNeqI $2 $3 }
+  | '#fdiv' aexp aexp { OpDivF $2 $3 }
+  | '#frem' aexp aexp { OpRemF $2 $3 }
+
+  | '#and' aexp aexp { OpAnd $2 $3}
+  | '#or'  aexp aexp { OpOr $2 $3}
+  | '#xor' aexp aexp { OpXor $2 $3}
+
+  | '#eq'  aexp aexp { OpEqI $2 $3 }
+  | '#neq' aexp aexp { OpNeqI $2 $3 }
+  | '#lt'  aexp aexp { OpLT $2 $3 }
+  | '#le'  aexp aexp { OpLE $2 $3 }
+  | '#gt'  aexp aexp { OpGT $2 $3 }
+  | '#ge'  aexp aexp { OpGE $2 $3 }
 
 -- -----------------------------------------------------------------------------
 -- | Types
