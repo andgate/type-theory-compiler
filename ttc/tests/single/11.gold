@@ -1,0 +1,5 @@
+e1 = <some error>
+e2 = 10
+e3 = 14
+addEither e1 e2 = <some error>
+addEither e2 e3 = 24

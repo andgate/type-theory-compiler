@@ -3,6 +3,16 @@
 
 #include <stdio.h>
 
+int printstr(uint8_t* str)
+{
+    return printf("%s", str);
+}
+
+int printint(int32_t x)
+{
+    return printf("%d", x);
+}
+
 //  /* reverse:  reverse string s in place */
 //  void reverse(uint8_t s[])
 //  {

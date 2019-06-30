@@ -1,0 +1,49 @@
+module Main
+
+extern printint : I32 -> I32
+extern printstr : *I8 -> I32
+
+type Either = Left *I8 | Right I32
+
+printEither : Either -> I32
+printEither e =
+  case e of
+    Left str -> printstr str
+    Right i -> printint i
+
+
+addEither : Either -> Either -> Either
+addEither e1 e2 =
+  case e1 of
+    Left str -> Left str
+    Right x ->
+      case e2 of
+        Left str -> Left str
+        Right y -> Right (#add x y)
+
+main : I32 -> **I8 -> I32
+main argc argv =
+  let e1 = Left "<some error>"
+      e2 = Right 10
+      e3 = Right 14
+
+      _ = printstr "e1 = "
+      _ = printEither e1
+      _ = printstr "\n"
+
+      _ = printstr "e2 = "
+      _ = printEither e2
+      _ = printstr "\n"
+
+      _ = printstr "e3 = "
+      _ = printEither e3
+      _ = printstr "\n"
+
+      _ = printstr "addEither e1 e2 = "
+      _ = printEither (addEither e1 e2)
+      _ = printstr "\n"
+
+      _ = printstr "addEither e2 e3 = "
+      _ = printEither (addEither e2 e3)
+      _ = printstr "\n"
+  in 0

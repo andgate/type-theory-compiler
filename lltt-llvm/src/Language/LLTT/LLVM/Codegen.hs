@@ -44,6 +44,7 @@ import LLVM.IRBuilder.Instruction
 import LLVM.IRBuilder.Extra
 
 import System.IO.Unsafe
+import Debug.Trace
 
 log :: String -> a -> a
 log msg a = a -- unsafePerformIO (putStrLn msg) `seq` a
@@ -624,11 +625,11 @@ genLit env ty = \case
     return ptr
 
   LL.LString str -> do
-    val_ptr <- alloca (Ty.ptr i8) Nothing 4
-    str_gptr <- globalStringPtr str =<< freshName "gstring"
-    str_gptr' <- bitcast str_gptr (Ty.ptr i8)
-    store val_ptr 4 str_gptr'
-    return val_ptr
+    str_ptr <- globalStringPtr str =<< freshUnName
+    str_ptr' <- bitcast str_ptr (Ty.ptr i8)
+    str_ptr_ptr <- alloca (Ty.ptr i8) Nothing 4
+    store str_ptr_ptr 4 str_ptr
+    return str_ptr_ptr
   
   LL.LStringI i -> do
     let ty = Ty.ArrayType (fromIntegral i) i8
@@ -638,9 +639,36 @@ genLit env ty = \case
     store strptr_ptr 4 strptr'
     return strptr_ptr
 
+  LL.LArray xs -> mdo
+    br arr_staging_blk
+
+    arr_staging_blk <- block `named` "arr.staging"
+    x_ptrs' <- mapM (genExp env) xs
+    br arr_alloc_blk
+
+    arr_alloc_blk <- block `named` "arr.alloc"
+    let ety = genType env $ LL.exType $ head xs
+        n = fromIntegral $ length xs
+        arrty = Ty.ArrayType n ety
+    arrptr <- alloca arrty Nothing 4
+    arrptr' <- bitcast arrptr (Ty.ptr ety)
+    arrptr_ptr <- alloca (Ty.ptr ety) Nothing 4
+    br arr_init_blk
+
+    arr_init_blk <- block `named` "arr.init"
+    forM_ (zip x_ptrs' [0..]) $ \ (x_ptr', i) -> do
+      e_ptr <- gep arrptr' [ConstantOperand $ C.Int 32 (toInteger i)]
+      x' <- load x_ptr' 4
+      store e_ptr 4 x'
+
+    store arrptr_ptr 4 arrptr'
+    return arrptr_ptr
+
   LL.LGetI e i -> do
     e_ptr' <- genExp env e
     log ("LGetI accessing gep") $ gep e_ptr' [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 (toInteger i)]
+
+  l -> error $ "genLit - undefined case encountered: " ++ show l
 
 genElse :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Else -> IRBuilderT m Operand
 genElse env = \case

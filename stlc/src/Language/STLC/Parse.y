@@ -348,6 +348,7 @@ aexp : var_name          { evar $1 }
      | aexp '.' var_name { EGet $1 $3 }
      | aexp '[' exp ']'  { EGetI $1 $3 }
      | '[' exp_list ']'  { ELit (LArray $2) }
+     | '[' ']' aexp      { ELit (LArrayI $3) }
      | '(' exp ')'       { $2 }
 
 aexps0 :: { [Exp] }

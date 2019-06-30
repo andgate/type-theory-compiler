@@ -1,0 +1,58 @@
+module Main
+
+extern free : *I8 -> I8
+extern malloc : I32 -> *I8
+
+extern printint : I32 -> I32
+extern printstr : *I8 -> I32
+
+printints : *I32 -> I32 -> I32
+printints xs n = printintsH xs n 0
+
+printintsH : *I32 -> I32 -> I32 -> I32
+printintsH xs n i =
+  if #eq n i then 0 else
+  let _ = printint xs[i]
+      i1 = #add i 1
+      _ = if #neq n i1 then printstr " " else 0
+  in printintsH xs n i1
+
+sumints : *I32 -> I32 -> I32
+sumints xs n = sumintsH xs n 0
+
+sumintsH : *I32 -> I32 -> I32 -> I32
+sumintsH xs n acc =
+  if #eq n 0 then acc else
+  let n1 = #sub n 1
+      acc1 = #add acc xs[n1]
+  in sumintsH xs n1 acc1
+
+mkArray : I32 -> *I32
+mkArray n = mkArrayH n (new [] 32)
+
+mkArrayH : I32 -> *I32 -> *I32
+mkArrayH i xs =
+  if #eq i 0 then xs else
+  let i1 = #sub i 1
+      _ = xs[i1] := i
+  in mkArrayH i1 xs
+
+main : I32 -> **I8 -> I32
+main argc argv =
+  let xs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] 
+      n = 10
+      
+      _ = printstr "xs = "
+      _ = printints xs n
+      _ = printstr "\n"
+
+      _ = printstr "sumints xs n = "
+      _ = printint (sumints xs n)
+      _ = printstr "\n"
+
+      ys = mkArray 100
+      _ = printstr "ys = "
+      _ = printints ys 100
+      _ = printstr "\n"
+      _ = delete ys
+  in 0

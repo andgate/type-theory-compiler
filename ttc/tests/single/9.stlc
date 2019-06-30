@@ -1,0 +1,57 @@
+module Main
+
+extern printstr : *I8 -> I32
+extern printint : I32 -> I32
+extern malloc : I32 -> *I8
+extern free : *I8 -> I8
+
+type V3 = V3 { x: I32, y: I32, z:I32 }
+
+printVector : V3 -> I32
+printVector v =
+  let _ = printstr "V { x = "
+      _ = printint v.x
+      _ = printstr ", y = "
+      _ = printint v.y
+      _ = printstr ", z = "
+      _ = printint v.z
+      _ = printstr " }\n"
+  in 0
+
+
+addVec : V3 -> V3 -> V3
+addVec v u = V3 (#add v.x u.x)
+                (#add v.y u.y)
+                (#add v.z u.z)
+
+add3 : I32 -> I32 -> I32 -> I32
+add3 x y z = #add (#add x y) z
+
+dot : V3 -> V3 -> I32
+dot v u = add3 (#mul v.x u.x) (#mul v.y u.y) (#mul v.z u.z) 
+
+cross : V3 -> V3 -> V3
+cross v u = V3 (#sub (#mul v.y u.z) (#mul v.z u.y))
+               (#sub (#mul v.z u.x) (#mul v.x u.z))
+               (#sub (#mul v.x u.y) (#mul v.y u.x))
+
+main : I32 -> **I8 -> I32
+main argc argv =
+  let v1 = V3 1 2 3
+      v2 = V3 4 5 6
+      _ = printstr "v1 = "
+      _ = printVector v1
+
+      _ = printstr "v2 = "
+      _ = printVector v2
+      
+      _ = printstr "add v1 v2 = "
+      _ = printVector (addVec v1 v2)
+      
+      _ = printstr "dot v1 v2 = "
+      _ = printint (dot v1 v2)
+      _ = printstr "\n"
+      
+      _ = printstr "cross v1 v2 = "
+      _ = printVector (cross v1 v2)
+  in 0

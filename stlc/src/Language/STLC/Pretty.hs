@@ -323,6 +323,11 @@ instance PrettyFresh Op where
       b' <- wrapBExpFresh b
       return $ hsep ["#eq", a', b']
 
+    OpNeqI a b -> do
+      a' <- wrapBExpFresh a
+      b' <- wrapBExpFresh b
+      return $ hsep ["#neq", a', b']
+
 
 -----------------------------------------------------------------------
 -- Helpers

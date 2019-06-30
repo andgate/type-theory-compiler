@@ -403,12 +403,16 @@ tcLit (LArray (x:xs)) Nothing = do
   let ty = exType x'
   xs' <- mapM (\x -> checkType x ty) xs
   let n = length (x:xs)
-  return $ EType (ELit $ LArray xs') (TArray n ty)
+  return $ EType (ELit $ LArray (x':xs')) (TPtr ty)
+
+tcLit (LArray xs) (Just (TPtr ty)) = do
+    xs' <- mapM (\x -> checkType x ty) xs
+    return $ EType (ELit $ LArray xs') (TPtr ty) 
 
 tcLit (LArray xs) (Just (TArray n ty))
   | length xs == n = do
       xs' <- mapM (\x -> checkType x ty) xs
-      return $ EType (ELit $ LArray xs') (TArray n ty)
+      return $ EType (ELit $ LArray xs') (TPtr ty)
   
   | otherwise = error $ "Array length mismatch!"
 
@@ -469,6 +473,7 @@ tcOp op mty = case op of
   OpSubI a b -> tcBOp OpSubI a b mty TI32 TI32
   OpMulI a b -> tcBOp OpMulI a b mty TI32 TI32
   OpEqI  a b -> tcBOp OpEqI  a b mty TI32 TBool
+  OpNeqI  a b -> tcBOp OpNeqI  a b mty TI32 TBool
 
   OpAddF a b -> error "Floating point unsupported"
   OpSubF a b -> error "Floating point unsupported"
