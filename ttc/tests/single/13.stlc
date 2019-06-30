@@ -1,0 +1,34 @@
+module Main
+
+extern printstr : *I8 -> I32
+extern printint : I32 -> I32
+
+type Tree = Tree I32 *Tree *Tree
+
+mkTree : I32 -> *Tree
+mkTree x = new Tree x null null
+
+copyTree : *Tree -> *Tree
+copyTree t =
+  if #eq t null then null
+  else case *t of
+    Tree x l r -> new Tree x (copyTree l) (copyTree r)
+    Leaf x -> new Leaf x
+
+insertTree : *Tree -> I32 -> *Tree
+insertTree t x = 
+  if #eq t null then
+    new Tree x null null
+  else case *t of
+    Tree y l r ->
+      if #gt x y then
+        new Tree y (copyTree l) (insertTree r x)
+      elif #eq x y then
+        new Tree y (copyTree l) (copyTree r)
+      else
+        new Tree y (insertTree l x) (copyTree r)
+
+
+
+main : I32 -> **I8 -> I32
+main argc argv = 0

@@ -301,7 +301,8 @@ exp : dexp { $1 }
 
 dexp :: { Exp }
 dexp
-  : cexp ':' type { EType $1 $3 }
+  : cexp ':' type  { EType $1 $3 }
+  : cexp 'as' type { ECast $1 $3 }
   | cexp { $1 }
 
 cexp :: { Exp }

@@ -73,6 +73,7 @@ data Exp
   | ELit Lit
   | ECall Exp (NonEmpty Exp)
   | EType Exp Type
+  | ECast Exp Type
   | ELet (NonEmpty (Pat, Exp)) Exp
   | EIf Exp Exp Else
   | EMatchI Exp (NonEmpty (Int, Exp))  -- ^ This will disappear
@@ -106,7 +107,8 @@ exType e = error $ "Expected typed expression, found: " ++ show e
 
 -- Literals
 data Lit
-  = LInt Int
+  = LNull
+  | LInt Int
   | LDouble Double
   | LBool Bool
   | LChar Char

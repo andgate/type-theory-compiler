@@ -70,6 +70,7 @@ data Exp
   = EVar Var
   | ELit Lit
   | EType Exp Type
+  | ECast Exp Type
   | EApp Exp [Exp]
   | ELam (Bind [Pat] Exp)
   | ELet (Bind (Rec [(Pat, Embed Exp)]) Exp)
@@ -99,7 +100,8 @@ data Exp
 
 -- Literals
 data Lit
-  = LInt Int
+  = LNull
+  | LInt Int
   | LDouble Double
   | LChar Char
   | LBool Bool
