@@ -20,13 +20,15 @@ library
                        LLVM.IRBuilder.Extra
   -- other-modules:
   -- other-extensions:
-  build-depends:       lltt,
+  build-depends:       language-syntax,
+                       lltt,
                        base ^>=4.12.0.0,
                        bifunctors,
                        bytestring,
                        containers,
                        llvm-hs,
                        llvm-hs-pure,
+                       prettyprinter,
                        text
   hs-source-dirs:      src
   default-language:    Haskell2010

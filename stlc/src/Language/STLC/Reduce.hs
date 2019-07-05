@@ -9,6 +9,8 @@ import Language.STLC.Syntax
 import Control.Monad.Reader
 
 import Data.Bifunctor
+import Data.List.NonEmpty (NonEmpty, (<|))
+import qualified Data.List.NonEmpty as NE
 import Data.Either
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -46,26 +48,29 @@ reduce = \case
 
   ELit l -> bimap ELit ELit <$> reduceLit l
   
-  EType e ty -> bimap (`EType` ty) (`EType` ty) <$> reduce e
-
   EApp f xs -> do
     some_xs' <- mapM reduce xs
     let xs' = either id id <$> some_xs'
-    if length (rights some_xs') /= 0
+    if length (rights $ NE.toList some_xs') /= 0
       then return $ Right $ EApp f xs'
       else do
         some_f' <- reduce f
         case some_f' of
           Left (ELam bnd) -> do 
             (ps, body) <- unbind bnd
-            let qs' = concatMap extractPat (zip ps xs')
+            let qs' = concatMap extractPat (NE.zip ps xs')
                 body' = substs qs' body
             return $ Right body'
 
             
           Left f' -> error $ "reduce - can't apply non-function:\n\n" ++ show f' ++ "\n\n"
           Right f' -> return $ Right $ EApp f' xs'
+  
+  EType e ty -> bimap (`EType` ty) (`EType` ty) <$> reduce e
+  ECast e ty -> bimap (`ECast` ty) (`ECast` ty) <$> reduce e
 
+  ELoc e _ -> reduce e
+  EParens e -> reduce e
 
   ELam bnd -> return $ Left $ ELam bnd
 
@@ -125,8 +130,8 @@ extractPat (pat, e)
   = case pat of
       PVar v -> [(v, e)]
       PCon n ps ->
-        case e of
-          EType (ECon con_n es) _ 
+        case exEAnn e of
+          ECon con_n es 
             | length ps == length es -> concatMap extractPat (zip ps es)
             | otherwise -> error $ "extractPat - Pattern-Constructor length mismatch!"
           
@@ -134,8 +139,20 @@ extractPat (pat, e)
                     ++ "Pattern: " ++ show (PCon n ps) ++ "\n\n" 
                     ++ "Expression: " ++ show e ++ "\n\n"
 
+      PTuple p ps ->
+        case exEAnn e of
+          ETuple con_n es 
+              | NE.length ps == length es -> concatMap extractPat $ NE.toList $ NE.zip (p<|ps) es
+              | otherwise -> error $ "extractPat - Pattern-Constructor length mismatch!"
+          
+          _ -> error $ "Unsupported pattern match.\n\n"
+                    ++ "Pattern: " ++ show (PTuple p ps) ++ "\n\n" 
+                    ++ "Expression: " ++ show e ++ "\n\n"
+
       PWild -> []
       PType p _ -> extractPat (p, e)
+      PLoc p _ -> extractPat (p, e)
+      PParens p -> extractPat (p, e)
 
 
 reduceOp :: MonadReduce m => Op -> m (Either Exp Exp)

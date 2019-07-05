@@ -1,7 +1,12 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE LambdaCase
+           , RecordWildCards
+           , ViewPatterns
+           #-}
 module Compiler where
 
 import Control.Monad.Except
+
+import Language.Syntax.Location
 
 import qualified Language.STLC.Desugar as STLC
 import qualified Language.STLC.Match as STLC
@@ -31,7 +36,7 @@ import System.IO
 import System.FilePath
 import System.Directory
 import System.Process (callCommand, waitForProcess)
-import System.Exit (exitWith, ExitCode(..), die)
+import System.Exit (exitFailure)
 
 
 data Compiler =
@@ -77,7 +82,7 @@ compileSTLC build_dir in_fp = do
 
   let build_fp = build_dir <> takeBaseName in_fp
 
-  let stlc' = STLC.checkModule stlc
+  stlc' <- reportTcErr $ STLC.checkModule stlc
   withFile (build_fp <> ".stlc.typed") WriteMode $ \h ->
     hPutDoc h $ pretty stlc'
   
@@ -85,11 +90,11 @@ compileSTLC build_dir in_fp = do
   --withFile (build_fp <> ".stlc.matched") WriteMode $ \h -> 
   --  hPutDoc h $ pretty stlc''
 
-  let lltc = STLC.desugarModule stlc'
+  let lltt@(locOf -> l) = STLC.desugarModule stlc'
   withFile (build_fp <> ".lltt") WriteMode $ \h -> 
-    hPutDoc h $ pretty lltc
+    hPutDoc h $ pretty lltt
 
-  let llvmir = LL.genModule LL.envEmpty in_fp lltc
+  let llvmir = LL.genModule (LL.mkEnv l) in_fp lltt
       irfp = build_fp <> ".ll"
   LLVM.withContext $ \c ->
     LLVM.withModuleFromAST c llvmir $ \m -> do
@@ -102,3 +107,11 @@ compileSTLC build_dir in_fp = do
   callCommand $ "clang-8 -O2 -S -emit-llvm " <> irfp <> " -o " <> irfp <> ".opt2"
 
   return (build_fp <> ".o")
+
+
+reportTcErr :: Either [STLC.TcErr] a -> IO a
+reportTcErr = \case
+  Left errs -> do
+    putDoc $ vsep (pretty <$> errs)
+    exitFailure
+  Right a -> return a

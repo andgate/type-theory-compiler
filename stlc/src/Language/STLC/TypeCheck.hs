@@ -7,24 +7,29 @@
            , DeriveGeneric
            , DeriveDataTypeable
            , TypeSynonymInstances
+           , OverloadedStrings
           #-}
 module Language.STLC.TypeCheck where
 
 import Language.STLC.Syntax
 import Language.STLC.Pretty
 
+import Control.Monad.Report
+
 -- Type Inference
 --   Type inference will enrich the ast with type annotations.
 -- While this language is intended to be the target of a
 -- higher level language, type inference is necessary
 -- for generating tests.
-
+import Language.Syntax.Location
 import Language.STLC.Syntax
 
 import Control.Monad.Reader
 
 import Data.Bifunctor
 import Data.List
+import Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NE
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -39,58 +44,155 @@ import Data.Text.Prettyprint.Doc
 -- Environment and Tc Monad
 -----------------------------------------------------------------
 
-type Env = Map String Type
-type Tc = ReaderT Env FreshM
-type MonadTc m = (MonadReader Env m, Fresh m)
+data Env = Env { envVars :: Map String Type
+               , envLoc  :: Loc
+               } deriving (Show)
+
+data TcErr
+  = UnificationFailure Loc Type Type
+  | IntLitMismatch Loc Type Int
+  | UntypedVariable Loc String
+  | RefMismatch Loc Type Exp
+  | DerefMismatch Loc Type Exp
+  | UnexpectedTuple Loc Type Exp
+  | UnknownTypeErr
+
+instance Pretty TcErr where
+  pretty = \case
+    UnificationFailure l t1 t2 ->
+      vsep [ line <> pretty l <+> "error:" 
+           , indent 4 $ vsep
+                  [ "Type mismatch."
+                  , "Expected:" <+> pretty t1
+                  , "Actual:" <+> pretty t2]
+           , line
+           ]
+
+    IntLitMismatch l t i ->
+      vsep [ line <> pretty l <+> "error:" 
+           , indent 4 $ vsep
+                [ "Expected Int literal to have integer type."
+                , "Actual:" <+> pretty t 
+                , "in:" <+> pretty i ]
+           , line
+           ]
+
+    UntypedVariable l n ->
+      vsep [ line <> pretty l <+> "error:" 
+           , indent 4 $ vsep
+                [ "Untyped variable encountered: " <+> pretty (show n)
+                , "All top-level variables and functions must be given type signatures." 
+                ]
+           , line
+           ]
+
+    RefMismatch l ty e ->
+      vsep [ line <> pretty l <+> "error:" 
+           , indent 4 $ vsep
+                [ "Expected non-pointer type, but references have pointer types."
+                , "Expected:" <+> pretty ty
+                , "in:" <+> pretty e ]
+           , line
+           ]
+
+    DerefMismatch l ty e ->
+      vsep [ line <> pretty l <+> "error:" 
+           , indent 4 $ vsep
+                [ "Cannot dereference non-pointer type."
+                , "Type given:" <+> pretty ty
+                , "in:"
+                , indent 4 $ pretty e
+                ]
+           , line
+           ]
+
+    UnexpectedTuple l ty e ->
+      vsep [ line <> pretty l <+> "error:" 
+           , indent 4 $ vsep
+                [ "Unexpected tuple encountered!"
+                , "Expected:" <+> pretty ty
+                , "in:"
+                , indent 4 $ pretty e
+                ]
+           , line
+           ]
+
+    UnknownTypeErr ->
+      "You've encountered an unknown type error!"
+
+
+type Tc = ReportT TcErr (ReaderT Env FreshM)
+type MonadTc m = (MonadReport TcErr m, MonadReader Env m, Fresh m)
 
 -- helpers
 
-lookupType :: MonadReader Env m => String -> m Type
+envInsertType :: String -> Type -> Env -> Env
+envInsertType n ty env = env { envVars = Map.insert n ty (envVars env) }
+
+envUpdateLocation :: Loc -> Env -> Env
+envUpdateLocation l env = env { envLoc = l }
+
+lookupType :: MonadTc m => String -> m Type
 lookupType n
-  = reader (Map.lookup n) >>= maybe err return
-  where err = error $ "Check: untyped variable encounted: " ++ n
+  = reader (Map.lookup n . envVars) >>= maybe err return
+  where err = do
+          l <- getLoc
+          fatal $ UntypedVariable l n
 
-withType :: MonadReader Env m => String -> Type -> m a -> m a
-withType n ty
-  = local (Map.insert n ty)
+getLoc :: MonadTc m => m Loc
+getLoc = reader envLoc
 
---------------------------------------------------------
-withTypes :: MonadReader Env m => [(String, Type)] -> m a -> m a
+withType :: MonadTc m => String -> Type -> m a -> m a
+withType n ty = local (envInsertType n ty)
+
+withTypes :: MonadTc m => [(String, Type)] -> m a -> m a
 withTypes ns = local (\env -> foldl f env ns)
-  where f env (n, ty) = Map.insert n ty env 
+  where f env (n, ty) = envInsertType n ty env 
 
+withLoc :: MonadTc m => Loc -> m a -> m a
+withLoc l = local (envUpdateLocation l)
+
+withMayLoc :: MonadTc m => Maybe Loc -> m a -> m a
+withMayLoc Nothing = id
+withMayLoc (Just l) = withLoc l
 
 -----------------------------------------------------------------
 -- Module Typechecking
 -----------------------------------------------------------------
 
-checkModule :: Module -> Module
-checkModule (Module n defns)
-  = Module n defns'
-  where env = makeEnv defns
-        m = mapM checkDefn defns
-        defns' = runFreshM (runReaderT m env)
+checkModule :: Module -> Either [TcErr] Module
+checkModule (Module l n defns)
+  = second (Module l n) edefs
+  where env = makeEnv l defns
+        m = checkDefns defns
+        edefs = runFreshM $ runReaderT (runReportT m) env
 
-makeEnv :: [Defn] -> Map String Type
-makeEnv defns = Map.fromList defns''
+makeEnv :: Loc -> [Defn] -> Env
+makeEnv l defns = Env { envVars = Map.fromList defns''
+                      , envLoc = l
+                      }
   where defns' = concatMap f defns
         defns'' = nubBy (\(n1,_) (n2, _) -> if n1 == n2 then err n1 else False) defns'
         err n = error $ "Illegal duplicate definition: " ++ n
         f = \case
-          FuncDefn (Func ty f bnd) -> [(f, ty)]
+          FuncDefn (Func _ ty f bnd) -> [(f, ty)]
           
-          ExternDefn (Extern n paramty retty) ->
+          ExternDefn (Extern _ n paramty retty) ->
             [(n, tarr paramty retty)]
 
-          DataTypeDefn (DataType dt_n dt_cons) ->
-            let mems = mconcat (snd <$> dt_cons)
-                mem_tys = [ (n, TArr (TCon dt_n) ty) | (Just n, ty) <- mems ]
+          DataTypeDefn (DataType _ dt_n dt_cons) ->
+            let ens = mconcat (getEntries <$> dt_cons)
+                mem_tys = [ (n, TArr (TCon dt_n) ty) | Entry _ n ty <- ens ]
                 con_tys = do
-                  (con_n, con_params) <- dt_cons
-                  let v = con_n
-                      ty = tarr (snd <$> con_params) (TCon dt_n)
-                  return (v, ty)
-            in mem_tys ++ con_tys
+                  ConstrDefn _ n con_params <- dt_cons
+                  let ty = tarr con_params (TCon dt_n)
+                  return (n, ty)
+                rcd_tys = do
+                  RecordDefn _ n ens <- dt_cons
+                  let tys = [ty | Entry _ _ ty <- NE.toList ens]
+                      ty = tarr tys (TCon n)
+                  return (n, ty)
+            in mem_tys ++ con_tys ++ rcd_tys
 
 
 
@@ -98,9 +200,12 @@ makeEnv defns = Map.fromList defns''
 -- Bidirectional Type Checking
 -----------------------------------------------------------------
 
+checkDefns :: MonadTc m => [Defn] -> m [Defn]
+checkDefns = mapM checkDefn
+
 checkDefn :: MonadTc m => Defn -> m Defn
 checkDefn = \case
-  FuncDefn (Func ty f bnd) -> do
+  FuncDefn (Func l ty f bnd) -> withLoc l $ do
     (ps, body) <- unbind bnd
 
     let (argtys, retty) = splitType ty
@@ -109,7 +214,7 @@ checkDefn = \case
     body' <- withTypes paramtys $ checkType body retty
 
     let bnd' = bind ps' body'
-    return $ FuncDefn $ Func ty f bnd'
+    return $ FuncDefn $ Func l ty f bnd'
 
   defn -> return defn
 
@@ -128,43 +233,53 @@ checkType e expectedTy = tcExp e (Just expectedTy)
 tcExp :: MonadTc m => Exp -> Maybe Type -> m Exp
 -- Expression Variables
 tcExp e@(EVar v) Nothing = EType e <$> lookupType (name2String v)
-tcExp e@(EVar v) (Just ty) = do
-  (EType e . (`unify` ty)) <$> lookupType (name2String v)
+tcExp e@(EVar v) (Just t1) = do
+  t2 <- lookupType (name2String v)
+  EType e <$> unify t1 t2
 
 -- Expression Literals
 tcExp (ELit l) mty = tcLit l mty
 
--- Expression Type Annotations
-tcExp (EType e ty') Nothing = checkType e ty'
-tcExp (EType e ty') (Just ty) = checkType e (unify ty ty')
-
 -- Expression Application
 tcExp (EApp f xs) Nothing = do
     f' <- inferType f
-    let (paramtys, retty) = splitType $ exType f'
-    xs' <- mapM (\(x, xty) -> checkType x xty) (zip xs paramtys)
+    let (NE.fromList -> paramtys, retty) = splitType $ exType f'
+    xs' <- mapM (\(x, xty) -> checkType x xty) (NE.zip xs paramtys)
     return $ EType (EApp f' xs') retty
 
 tcExp (EApp f xs) (Just ty) = do
   f' <- inferType f
-  let (paramtys, retty) = splitType $ exType f'
-  xs' <- mapM (\(x, xty) -> checkType x xty) (zip xs paramtys)
-  return $ EType (EApp f' xs') (unify ty retty)
+  let (NE.fromList -> paramtys, retty) = splitType $ exType f'
+  xs' <- mapM (\(x, xty) -> checkType x xty) (NE.zip xs paramtys)
+  EType (EApp f' xs') <$> unify ty retty
+
+-- Expression Type Annotations
+tcExp (EType e ty') Nothing = checkType e ty'
+tcExp (EType e ty') (Just ty) = checkType e =<< unify ty ty'
+
+-- Expression Type Casts
+tcExp (ECast e ty') Nothing = ECast <$> inferType e <*> pure ty'
+tcExp (ECast e ty') (Just ty) = do
+  ty'' <- unify ty ty'
+  ECast <$> inferType e <*> pure ty''
+
+tcExp (ELoc e l) mty = withLoc l $ ELoc <$> tcExp e mty <*> pure l
+tcExp (EParens e) mty = EParens <$> tcExp e mty
 
 -- Lambda Expressions
 tcExp (ELam bnd) Nothing = do
-  (ps, body) <- unbind bnd
+  (NE.toList -> ps, body) <- unbind bnd
   ps' <- mapM (\p -> tcPat p Nothing) ps
   let ns = concatMap patTypedVars ps'
   body' <- withTypes ns (inferType body)
   let retty = exType body'
       paramtys = exPType <$> ps'
       ty' = tarr paramtys retty
-  return $ EType (ELam $ bind ps' body') ty'
+  return $ EType (ELam $ bind (NE.fromList ps') body') ty'
 
 tcExp (ELam bnd) (Just ty) = do
   let (paramtys, retty) = splitType ty
-  (ps, body) <- unbind bnd
+  (NE.toList -> ps, body) <- unbind bnd
   when (length paramtys /= length ps)
      $ error $ "tcExp - Lambda type arity mismatch!"
 
@@ -174,7 +289,8 @@ tcExp (ELam bnd) (Just ty) = do
   let retty' = exType body'
       paramtys' = exPType <$> ps'
       ty' = tarr paramtys' retty'
-  return $ EType (ELam $ bind ps' body') (unify ty ty')
+  EType (ELam $ bind (NE.fromList ps') body')
+    <$> unify ty ty'
 
 -- Let Expression
 tcExp (ELet bnd) mty = do
@@ -185,19 +301,19 @@ tcExp (ELet bnd) mty = do
             q'@(p, _) <- tcLetBind q
             let ns = patTypedVars p
             withTypes ns $ go qs (q':qs')
-  qs' <- reverse <$> go qs []
+  qs' <- reverse <$> go (NE.toList qs) []
   let ns = concatMap (patTypedVars . fst) qs'
   withTypes ns $ do
     body' <- tcExp body mty
-    let letbnds' = rec (second embed <$> qs')
+    let letbnds' = rec $ NE.fromList (second embed <$> qs')
     return $ EType (ELet $ bind letbnds' body')
-                    (exType body')
+                   (exType body')
 
 tcExp (EIf p t f) Nothing = do
   p' <- checkType p TBool
   t' <- inferType t
   f' <- tcElse f Nothing
-  let ty = unify (exType t') (exElseType f')
+  ty <- unify (exType t') (exElseType f')
   return $ EType (EIf p' t' f') ty
 
 
@@ -212,7 +328,7 @@ tcExp (ECase e cls) mty = do
   let ety = exType e'
   cls' <- mapM (\cl -> tcClause cl (Just ety) mty) cls
   
-  ty' <- exType <$> exClauseBody (head cls')
+  ty' <- exType <$> exClauseBody (NE.head cls')
   return $ EType (ECase e' cls') ty'
 
 -- Ref Expression
@@ -221,23 +337,49 @@ tcExp (ERef e) Nothing = do
   let ty' = TPtr $ exType e'
   return $ EType (ERef e') ty'
 
-tcExp (ERef e) (Just ty@(TPtr ety)) = do
-  e' <- checkType e ety
-  return $ EType (ERef e') ty
+tcExp (ERef e) (Just ty) = do
+  let ty' = exTyAnn ty
+  case ty' of
+    TPtr ety -> do
+      e' <- checkType e ety
+      return $ EType (ERef e') ty
+    _ -> do
+      l <- getLoc
+      fatal $ RefMismatch l ty (ERef e)
 
-tcExp (ERef e) (Just ty) =
-  error $ "Cannot dereference non-pointer of type " ++ show (pretty ty) ++"\n\n"
 
 -- Deref Expression
 tcExp (EDeref e) Nothing = do
   e' <- inferType e
-  case exType e' of
+  let ty = exTyAnn $ exType e'
+  case ty of
     TPtr ty' -> return $ EType (EDeref e') ty'
-    _ -> error $ "Expected a pointer type. Cannot dereference a non-pointer."
+    _ -> do
+      l <- getLoc
+      fatal $ DerefMismatch l ty (EDeref e)
 
 tcExp (EDeref e) (Just ty) = do
   e' <- checkType e (TPtr ty)
   return $ EType (EDeref e') ty
+
+tcExp (ETuple e es) Nothing = do
+  e' <- inferType e
+  es' <- mapM inferType es
+  let ty = exType e'
+      tys = exType <$> es'
+  return $ EType (ETuple e' es') (TTuple ty tys)
+
+tcExp (ETuple e es) (Just ty1) = do
+  case exTyAnn ty1 of
+    TTuple ty2 ty2s -> do
+      e' <- checkType e ty2
+      es' <- mapM (uncurry checkType) (NE.zip es ty2s)
+      return $ EType (ETuple e' es') ty1
+
+    _ -> do
+      l <- getLoc
+      fatal $ UnexpectedTuple l ty1 (ETuple e es)
+
 
 
 -- Constructor Expression
@@ -245,7 +387,7 @@ tcExp (ECon n args) mty = do
   (paramtys, retty) <- splitType <$> lookupType n
   e' <- ECon n <$> zipWithM (\arg argty -> tcExp arg argty)
                             args (Just <$> paramtys)
-  let ty' = maybe retty (`unify` retty) mty
+  ty' <- maybe (return retty) (`unify` retty) mty
   return $ EType e' ty'
 
 -- New Expression
@@ -253,31 +395,40 @@ tcExp (ENewCon n args) mty = do
   (paramtys, retty) <- (second TPtr . splitType) <$> lookupType n
   e' <- ENewCon n <$> zipWithM (\arg argty -> tcExp arg argty)
                                args (Just <$> paramtys)
-  let ty' = maybe retty (`unify` retty) mty
+  ty' <- maybe (return retty) (`unify` retty) mty
   return $ EType e' ty'
 
 -- Free Expression
 tcExp (EFree e) mty =
-  EType <$> (EFree <$> tcExp e mty) <*> pure TVoid
+  EType <$> (EFree <$> tcExp e mty) <*> pure TI8
 
 tcExp (EGet e n) mty = do
   mget_ty <- lookupType n
   let (ety, ty') = first (head) $ splitType mget_ty
   e' <- checkType e ety
-  return $ EType (EGet e' n)
-                 (maybe ty' (`unify` ty') mty)
+  EType (EGet e' n) <$> maybe (return ty') (`unify` ty') mty
 
-tcExp (EGetI e i) mty = do
-  e' <- tcExp e Nothing
+tcExp r@(EGetI e i) mty = do
+  e' <- inferType e
   i' <- checkType i TI32
-  case exType e' of
+  case exTyAnn (exType e') of
     TArray _ rty ->
-      return $ EType (EGetI e' i') (maybe rty (`unify` rty) mty)
+      EType (EGetI e' i') <$> maybe (return rty) (`unify` rty) mty
     
     TPtr rty ->
-      return $ EType (EGetI e' i') (maybe rty (`unify` rty) mty)
+      EType (EGetI e' i') <$> (maybe (return rty) (`unify` rty) mty)
 
-    _ -> error $ "Cannot index into non-array or non-ptr type"
+    aty -> do
+      l <- getLoc
+      error $ show $ vsep [ line <> pretty l <+> "error:"
+                          , indent 4 $ vsep [ "Cannot index into non-array or non-ptr type"
+                                            , "Actual:" <+> pretty aty
+                                            , maybe mempty (\xty -> "Expected:" <+> pretty xty) mty
+                                            , "in"
+                                            , pretty (EGetI e' i) <+> "@" <+> pretty l
+                                            , line
+                                            ]
+                          ]
 
 tcExp (ESet lhs rhs) mty = do
   lhs' <- maybe (inferType lhs) (checkType lhs) mty
@@ -316,7 +467,7 @@ tcExp (ENewArrayI i) Nothing =
 -- So can't return array, it has to be a double pointer.
 -- We'll solve this problem some other day.
 
-tcExp (ENewArrayI i) (Just ty@(TPtr _)) = do
+tcExp (ENewArrayI i) (Just ty@(exTyAnn -> TPtr _)) = do
   i' <- checkType i TI32
   return $ EType (ENewArrayI i') ty
 
@@ -353,11 +504,11 @@ tcExp (EResizeArray e i) (Just ty)
 
 tcExp (ENewStringI i) Nothing = do
   i' <- checkType i TI32
-  return $ EType (ENewStringI i') TString
+  return $ EType (ENewStringI i') (TPtr TI8)
 
 tcExp (ENewStringI i) (Just ty) = do
   i' <- checkType i TI32
-  return $ EType (ENewStringI i') (unify ty TString)
+  EType (ENewStringI i') <$> unify ty (TPtr TI8)
 
 
 -- Expression Operations
@@ -367,32 +518,40 @@ tcExp (EOp op) mty = tcOp op mty
 -- Type checking on literals
 tcLit :: MonadTc m => Lit -> Maybe Type -> m Exp
 
+tcLit LNull Nothing = error "Cannot infer null"
+
+tcLit LNull (Just t1@(exTyAnn -> TPtr _)) =
+  return $ EType (ELit LNull) t1
+
+tcLit LNull (Just t1) = do
+  l <- getLoc
+  fatal $ UnificationFailure l t1 (TPtr t1)
+
+
 tcLit (LInt i) Nothing = return $ EType (ELit $ LInt i) TI32
 tcLit (LInt i) (Just ty)
-  | ty `elem` inttypes = return $ EType (ELit $ LInt i) ty
-  | otherwise = error $ "Expected Int literal to have integer type. "
-                     ++ "Instead, found type " ++ show (pretty ty)
+  | (exTyAnn ty) `elem` intTypes = return $ EType (ELit $ LInt i) ty
+  | otherwise = do
+      l <- getLoc
+      fatal $ IntLitMismatch l ty i
 
-tcLit (LChar c) Nothing = return $ EType (ELit $ LChar c) TChar
-tcLit (LChar c) (Just ty) = return $ EType (ELit $ LChar c) (unify ty TChar)
+tcLit (LChar c) Nothing   = return $ EType (ELit $ LChar c) TI8
+tcLit (LChar c) (Just ty) = EType (ELit $ LChar c) <$> unify ty TI8
 
 -- Strings
 tcLit (LString s) Nothing
-  = return $ EType (ELit $ LString s) TString
-tcLit (LString s) (Just TString)
-  = return $ EType (ELit $ LString s) TString
-tcLit (LString s) (Just (TPtr TI8))
   = return $ EType (ELit $ LString s) (TPtr TI8)
-tcLit (LString s) (Just ty)
-  = error $ "Expected String type, found " ++ show (pretty ty)
+tcLit (LString s) (Just ty) =
+  EType (ELit $ LString s) <$> unify ty (TPtr TI8)
+
 
 tcLit (LStringI i) Nothing = do
   i' <- checkType i TI32
-  return $ EType (ELit $ LStringI i') TString
+  return $ EType (ELit $ LStringI i') (TPtr TI8)
 
 tcLit (LStringI i) (Just ty) = do
   i' <- checkType i TI32
-  return $ EType (ELit $ LStringI i') (unify TString (unify (TPtr TI8) ty))
+  EType (ELit $ LStringI i') <$> unify (TPtr TI8) ty
 
 -- Arrays
 tcLit (LArray []) Nothing
@@ -432,10 +591,10 @@ tcLit (LArrayI _) (Just ty)
 
 
 tcClause :: MonadTc m => Clause -> Maybe Type -> Maybe Type -> m Clause
-tcClause (Clause bnd) pmty emty = do
+tcClause (Clause ml bnd) pmty emty = withMayLoc ml $ do
   q <- unbind bnd
   (p, e) <- tcEquation q pmty emty
-  return $ Clause (bind p e)
+  return $ Clause ml (bind p e)
 
 tcEquation :: MonadTc m => (Pat, Exp) -> Maybe Type -> Maybe Type -> m (Pat, Exp)
 tcEquation (p, e) pmty emty = do
@@ -454,53 +613,83 @@ tcLetBind (p, e) = do
 
 
 tcElse :: MonadTc m => Else -> Maybe Type -> m Else
-tcElse (Else e) mty = Else <$> tcExp e mty
-tcElse (Elif p t f) (Nothing) = do
+tcElse (Else ml e) mty
+  = withMayLoc ml $ Else ml <$> tcExp e mty
+tcElse (Elif ml p t f) (Nothing) = withMayLoc ml $ do
   p' <- checkType p TBool
   t' <- inferType t
   f' <- tcElse f Nothing
-  let ty = unify (exType t') (exElseType f')
-  return $ ty `seq` Elif p' t' f'
+  ty <- unify (exType t') (exElseType f')
+  return $ ty `seq` Elif ml p' t' f'
 
 
-tcElse (Elif p t f) (Just ty) 
-  = Elif <$> checkType p TBool <*> checkType t ty <*> tcElse f (Just ty)
+tcElse (Elif ml p t f) (Just ty) = withMayLoc ml $
+  Elif ml <$> checkType p TBool <*> checkType t ty <*> tcElse f (Just ty)
+
+
 
 
 tcOp :: MonadTc m => Op -> Maybe Type -> m Exp
 tcOp op mty = case op of
-  OpAddI a b -> tcBOp OpAddI a b mty TI32 TI32
-  OpSubI a b -> tcBOp OpSubI a b mty TI32 TI32
-  OpMulI a b -> tcBOp OpMulI a b mty TI32 TI32
-  OpDivI a b -> tcBOp OpDivI a b mty TI32 TI32
-  OpRemI a b -> tcBOp OpRemI a b mty TI32 TI32
+  OpAddI a b -> tcBOp OpAddI a b mty intTypes Nothing
+  OpSubI a b -> tcBOp OpSubI a b mty intTypes Nothing
+  OpMulI a b -> tcBOp OpMulI a b mty intTypes Nothing
+  OpDivI a b -> tcBOp OpDivI a b mty intTypes Nothing
+  OpRemI a b -> tcBOp OpRemI a b mty intTypes Nothing
 
-  OpAddF a b -> tcBOp OpAddF a b mty TF64 TF64
-  OpSubF a b -> tcBOp OpSubF a b mty TF64 TF64
-  OpMulF a b -> tcBOp OpMulF a b mty TF64 TF64
-  OpDivF a b -> tcBOp OpDivF a b mty TF64 TF64
-  OpRemF a b -> tcBOp OpRemF a b mty TF64 TF64
+  OpAddF a b -> tcBOp OpAddF a b mty floatTypes Nothing
+  OpSubF a b -> tcBOp OpSubF a b mty floatTypes Nothing
+  OpMulF a b -> tcBOp OpMulF a b mty floatTypes Nothing
+  OpDivF a b -> tcBOp OpDivF a b mty floatTypes Nothing
+  OpRemF a b -> tcBOp OpRemF a b mty floatTypes Nothing
 
-  OpAnd a b -> tcBOp OpAnd a b mty TBool TBool
-  OpOr  a b -> tcBOp OpOr  a b mty TBool TBool
-  OpXor a b -> tcBOp OpXor a b mty TBool TBool
+  OpAnd a b -> tcBOp OpAnd a b mty [TBool] (Just TBool)
+  OpOr  a b -> tcBOp OpOr  a b mty [TBool] (Just TBool)
+  OpXor a b -> tcBOp OpXor a b mty [TBool] (Just TBool)
 
-  OpEqI  a b -> tcBOp OpEqI  a b mty TI32 TBool
-  OpNeqI a b -> tcBOp OpNeqI a b mty TI32 TBool
+  OpEqI  a b -> tcBOp OpEqI  a b mty intTypes (Just TBool)
+  OpNeqI a b -> tcBOp OpNeqI a b mty intTypes (Just TBool)
   
-  OpLT  a b -> tcBOp OpLT a b mty TI32 TBool
-  OpLE  a b -> tcBOp OpLE a b mty TI32 TBool
-  OpGT  a b -> tcBOp OpGT a b mty TI32 TBool
-  OpGE  a b -> tcBOp OpGE a b mty TI32 TBool
+  OpLT  a b -> tcBOp OpLT a b mty intTypes (Just TBool)
+  OpLE  a b -> tcBOp OpLE a b mty intTypes (Just TBool)
+  OpGT  a b -> tcBOp OpGT a b mty intTypes (Just TBool)
+  OpGE  a b -> tcBOp OpGE a b mty intTypes (Just TBool)
 
 
-tcBOp :: MonadTc m  => (Exp -> Exp -> Op) -> Exp -> Exp
-                    -> Maybe Type -> Type -> Type -> m Exp
-tcBOp constr a b Nothing paramty retty = 
-  tcBOp constr a b (Just retty) paramty retty
-tcBOp constr a b (Just retty') paramty retty = do
-  op' <- constr <$> checkType a paramty <*> checkType b paramty
-  return $ EType (EOp op') (unify retty retty')
+tcBOp :: MonadTc m  => (Exp -> Exp -> Op) -> Exp -> Exp -> Maybe Type
+                    -> [Type] -> Maybe Type -> m Exp
+tcBOp constr a b Nothing paramtys Nothing = do
+  a' <- inferType a
+  let aty = exType a'
+  unless (aty `elem` paramtys)
+        $ error $ "Operation has unexpected type:"
+  b' <- checkType b aty
+  let op' = constr a' b'
+  return $ EType (EOp op') aty
+
+tcBOp constr a b (Just ty) paramtys Nothing = do
+  unless (ty `elem` paramtys)
+       $ error $ "Operation has unexpected type"
+  op' <- constr <$> checkType a ty <*> checkType b ty
+  return $ EType (EOp op') ty
+
+tcBOp constr a b Nothing paramtys (Just retty) = do
+  a' <- inferType a
+  let aty = exType a'
+  unless (aty `elem` paramtys)
+      $ error $ "Operation has unexpected type!"
+  b' <- checkType b aty
+  let op' = constr a' b'
+  return $ EType (EOp op') retty
+
+tcBOp constr a b (Just ty) paramtys (Just retty) = do
+  a' <- inferType a
+  let aty = exType a'
+  unless (aty `elem` paramtys)
+      $ error $ "Operation has unexpected type!"
+  b' <- checkType b aty
+  let op' = constr a' b'
+  EType (EOp op') <$> unify ty retty
 
 
 tcPat :: MonadTc m => Pat -> Maybe Type  -> m Pat
@@ -522,6 +711,20 @@ tcPat (PCon n ps) mty = do
       | ty /= retty -> error $ "Pattern type mismatch"
     _ -> return $ PType (PCon n ps') retty
 
+tcPat (PTuple p ps) Nothing = do
+    p' <- tcPat p Nothing
+    ps' <- mapM (`tcPat` Nothing) ps 
+    return $ PType (PTuple p' ps')
+                   (TTuple (exPType p') (exPType <$> ps'))
+
+tcPat (PTuple p ps) (Just ty) = do
+  case exTyAnn ty of
+    TTuple t ts -> do
+      p' <- tcPat p (Just t)
+      ps' <- mapM (uncurry tcPat) (NE.zip ps (Just <$> ts)) 
+      return $ PType (PTuple p' ps') ty
+    _ -> error $ "Type mismatch!\nExpected: " ++ show (pretty ty) ++ "\nActual: Some tuple\n"
+
 tcPat PWild (Just ty) = return $ PType PWild ty
 tcPat PWild Nothing = error $ "Can not infer type of wildcard pattern."
 
@@ -536,3 +739,20 @@ tcPat (PType p ty') (Just ty)
           ++ "env: " ++ show env ++ "\n\n"
 
 tcPat (PType p ty') Nothing = tcPat p (Just ty')
+
+tcPat (PLoc p l) mty = withLoc l (PLoc <$> tcPat p mty <*> pure l)
+tcPat (PParens p) mty = PParens <$> tcPat p mty
+
+
+
+
+------------------------------------------------------------------------------------------------
+-- Unification 
+------------------------------------------------------------------------------------------------
+
+unify :: MonadTc m => Type -> Type -> m Type
+unify t1 t2
+  | t1 == t2 = return t2
+  | otherwise = do
+      l <- getLoc
+      fatal $ UnificationFailure l t1 t2

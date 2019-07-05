@@ -7,5 +7,7 @@ module Language.SystemF.Lift where
 
 -- This pass requires partial and cconv.
 
+import Language.SystemF.Syntax
+
 lift :: Module -> Module
 lift = undefined

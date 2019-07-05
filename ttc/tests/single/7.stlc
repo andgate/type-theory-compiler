@@ -1,7 +1,7 @@
 module Main
 
-extern int2str : I32 -> String -> String
-extern puts : String -> I32
+extern int2str : I32 -> *I8 -> *I8
+extern puts : *I8 -> I32
 extern malloc : I32 -> *I8
 extern free : *I8 -> I8
 

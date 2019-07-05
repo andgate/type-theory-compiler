@@ -1,20 +1,24 @@
 {-# LANGUAGE LambdaCase
            , OverloadedStrings
            , FlexibleInstances
+           , ViewPatterns
            #-}
 module Language.STLC.Pretty where
 
 import Language.STLC.Syntax
+
+import Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NE
+import Data.Maybe
 
 import Unbound.Generics.LocallyNameless
 import Unbound.Generics.LocallyNameless.Name
 
 import Data.Text.Prettyprint.Doc
 
-import Data.Maybe
 
 instance Pretty Module where
-  pretty (Module n ds)
+  pretty (Module _ n ds)
     = vsep (("module" <+> pretty n <> line):(pretty <$> ds))
 
 
@@ -26,68 +30,56 @@ instance Pretty Defn where
 
 
 instance Pretty Extern where
-  pretty (Extern n paramtys retty)
+  pretty (Extern _ n paramtys retty)
     = hsep ["extern", pretty n, ":", pretty (tarr paramtys retty)]
 
 
 instance Pretty DataType where
-  pretty (DataType n [])
+  pretty (DataType _ n [])
     = "type" <+> pretty n
 
-  pretty (DataType n (c:cs))
+  pretty (DataType _ n (c:[]))
+    = "type" <+> pretty n <+> "=" <+> pretty c
+
+  pretty (DataType _ n (c:cs))
     = vsep [ "type" <+> pretty n
-           , indent 2 (vsep (c':cs'))
+           , indent 2 $ vsep $
+              [ "=" <+> pretty c ] 
+               ++ ["|" <+> pretty c | c <- cs]
            ]
-    where
-      (c_n, c_args) = c
-      c_args'
-        | length (catMaybes (fst <$> c_args)) == 0 = do
-            (_, ty) <- c_args
-            return $ pretty ty
 
-        | otherwise = do
-            (may_n, ty) <- c_args
-            return $ (maybe "_" pretty may_n) <+> ":" <+> pretty ty
+instance Pretty ConstrDefn where
+  pretty = \case
+    ConstrDefn l n tys -> pretty n <+> hsep (pretty <$> tys)
+    RecordDefn l n (NE.toList -> ens) -> pretty n <+> encloseSep lbrace rbrace comma (pretty <$> ens)
 
-      c' = if length (catMaybes (fst <$> c_args)) == 0
-             then "=" <+> pretty c_n <+> hsep c_args' 
-             else "=" <+> pretty c_n <+> encloseSep lbrace rbrace comma c_args' 
+instance Pretty Entry where
+  pretty (Entry _ n ty) = pretty n <+> ":" <+> pretty ty
 
-      cs' = do
-        (n, args) <- cs
-        let args'
-              | length (catMaybes (fst <$> args)) == 0 = do
-                  (_, ty) <- args
-                  return $ pretty ty
-              | otherwise = do
-                  (may_n, ty) <- args
-                  return $ (maybe "_" pretty may_n) <+> ":" <+> pretty ty
-
-        if length (catMaybes (fst <$> args)) == 0
-          then return $ "|" <+> pretty n <+> hsep args'
-          else return $ "|" <+> pretty n <+> encloseSep lbrace rbrace comma args'
-        
 
 instance Pretty Type where
   pretty = \case
     TArr a b -> pretty a <+> "->" <+> pretty b
     TCon n -> pretty n
+    TBool -> "Bool"
     TI8 -> "I8"
     TI32 -> "I32"
     TI64 -> "I64"
     TF32 -> "F32"
     TF64 -> "F64"
-    TBool -> "Bool"
-    TChar -> "Char"
+    TTuple t (NE.toList -> ts)
+      -> tupled $ pretty <$> (t:ts)
     TArray i ty 
       | isAType ty -> pretty ty <> brackets (pretty i)
       | True       -> parens (pretty ty) <> brackets (pretty i)
     TPtr ty 
       | isAType ty -> "*" <> pretty ty
       | True       -> "*" <> parens (pretty ty)
-    TString -> "String"
-    TVoid -> "Void"
+    TLoc ty _ -> pretty ty
+    TParens ty -> parens $ pretty ty
 
+instance Pretty Exp where
+  pretty = pretty . FreshP
 
 class PrettyFresh a where
   prettyFresh :: Fresh m => a -> m (Doc ann)
@@ -99,7 +91,7 @@ instance PrettyFresh a => Pretty (FreshP a) where
 
 
 instance PrettyFresh Func where
-  prettyFresh (Func ty n bnd) = do
+  prettyFresh (Func _ ty n bnd) = do
     (ps, body) <- unbind bnd
     let ps' = do
           p <- ps
@@ -130,7 +122,12 @@ instance PrettyFresh Exp where
     EVar n -> return $ pretty (name2String n)
 
     ELit l -> prettyFresh l
+    EApp f (NE.toList -> xs) -> do
+      f' <- wrapBExpFresh f
+      xs' <- mapM wrapBExpFresh xs
+      return $ hsep (f':xs') 
 
+    
     EType e ty -> do
       e' <- prettyFresh e
       let ty' = pretty ty
@@ -138,14 +135,28 @@ instance PrettyFresh Exp where
         then return $ hsep [e', ":", ty']
         else return $ hsep [parens e', ":", ty']
     
-    EApp f xs -> do
-      f' <- wrapBExpFresh f
-      xs' <- mapM wrapBExpFresh xs
-      return $ hsep (f':xs') 
+    ECast e ty -> do
+      e' <- prettyFresh e
+      let ty' = pretty ty
+      if isAExp e || isBExp e 
+        then return $ hsep [e', "as", ty']
+        else return $ hsep [parens e', "as", ty']
+    
+    ELoc e _ -> prettyFresh e
+    EParens e -> parens <$> prettyFresh e
+
+    ELam bnd -> do
+      (NE.toList -> ps, body) <- unbind bnd
+      body' <- prettyFresh body
+      return $ align $ vsep
+        [ "\\" <+> hsep (pretty <$> ps) <+> "->"
+        , indent 4 body'
+        ]
+      
     
     ELet bnd -> do
       (r_qs, e) <- unbind bnd
-      let (ps, es) = unzip [ (p, e) | (p, Embed e) <- unrec r_qs]
+      let (ps, es) = unzip [ (p, e) | (p, Embed e) <- NE.toList (unrec r_qs)]
       let ps' = pretty <$> ps
       es' <- mapM prettyFresh es
       let qs' = [ q' <+> "=" <+> e'
@@ -166,7 +177,7 @@ instance PrettyFresh Exp where
 
     ECase e cls -> do
       e' <- prettyFresh e
-      cls' <- mapM prettyFresh cls
+      cls' <- mapM prettyFresh (NE.toList cls)
       return $ vsep $ [ "case" <+> e' <+> "of"
                       , indent 2 (vsep cls')]
     
@@ -182,6 +193,9 @@ instance PrettyFresh Exp where
         then return $ "*" <> e'
         else return $ "*" <> parens e'
     
+    ETuple e (NE.toList -> es) ->
+      tupled <$> mapM prettyFresh (e:es)
+
     ECon n [] ->
       return $ pretty n
 
@@ -257,7 +271,7 @@ instance PrettyFresh Lit where
 
 instance PrettyFresh Else where
   prettyFresh = \case
-    Elif p t f -> do
+    Elif _ p t f -> do
       p' <- prettyFresh p
       t' <- prettyFresh t
       f' <- prettyFresh f
@@ -266,7 +280,7 @@ instance PrettyFresh Else where
                     , f'
                     ]
 
-    Else body -> do
+    Else _ body -> do
       body' <- prettyFresh body
       return $ "else" <+> body'
 
@@ -282,11 +296,15 @@ instance Pretty Pat where
                       else parens $ pretty p
       in pretty n <+> hsep ps'
   
+    PTuple p (NE.toList -> ps) ->
+      tupled $ pretty <$> (p:ps)
     PWild -> "_"
     PType p ty -> hsep [pretty p, ":", pretty ty]
+    PLoc p _ -> pretty p
+    PParens p -> parens $ pretty p
 
 instance PrettyFresh Clause where
-  prettyFresh (Clause bnd) = do
+  prettyFresh (Clause _ bnd) = do
     (p, e) <- unbind bnd
     let p' = if isAPat p || isBPat p
                then pretty p
@@ -420,8 +438,15 @@ isBExp :: Exp -> Bool
 isBExp = \case
   EVar _ -> False
   ELit _ -> False
-  EType _ _ -> False
   EApp _ _ -> True
+
+  EType _ _ -> False
+  ECast _ _ -> False
+
+  ELoc e _ -> isBExp e 
+  EParens _ -> False
+  
+  ELam _ -> False
   ELet _ -> False
   EIf _ _ _ -> False
   ECase _ _ -> False
@@ -451,8 +476,15 @@ isAExp :: Exp -> Bool
 isAExp = \case
   EVar _ -> True
   ELit _ -> True
-  EType _ _ -> False
   EApp _ _ -> False
+
+  EType _ _ -> False
+  ECast _ _ -> False
+
+  ELoc e _ -> isAExp e
+  EParens _ -> True
+
+  ELam _ -> False
   ELet _ -> False
   EIf _ _ _ -> False
   ECase _ _ -> False
@@ -460,6 +492,7 @@ isAExp = \case
   ERef _ -> True
   EDeref _ -> True
   
+  ETuple _ _ -> True
   ECon _ [] -> True
   ECon _ _ -> False
   ENewCon _ _ -> False
@@ -482,30 +515,36 @@ isAType :: Type -> Bool
 isAType = \case
   TArr _ _ -> False
   TCon _ -> True
+  TBool -> True
   TI8 -> True
   TI32 -> True
   TI64 -> True
   TF32 -> True
   TF64 -> True
-  TBool -> True
-  TChar -> True
+  TTuple _ _ -> True
   TArray _ _ -> True
   TPtr _ -> True
-  TString -> True
-  TVoid -> True
+  TLoc ty _ -> isAType ty
+  TParens _ -> True
 
 isAPat :: Pat -> Bool
 isAPat = \case
   PVar _ -> True
   PCon _ [] -> True
   PCon _ _ -> False
+  PTuple _ _ -> True
   PWild -> True
   PType _ _ -> False
+  PLoc p _ -> isAPat p
+  PParens _ -> True
 
 isBPat :: Pat -> Bool
 isBPat = \case
   PVar _ -> False
   PCon _ [] -> False
   PCon _ _ -> True
+  PTuple _ _ -> False
   PWild -> False
   PType _ _ -> False
+  PLoc p _ -> isBPat p
+  PParens _ -> False

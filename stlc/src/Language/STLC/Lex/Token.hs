@@ -8,12 +8,13 @@
   #-}
 module Language.STLC.Lex.Token where
 
-import Lens.Micro.Platform
-import Data.Binary hiding (encode)
-import Data.Data
-import Data.Text (Text, pack)
-import GHC.Generics (Generic)
 import Language.Syntax.Location
+
+import Lens.Micro.Platform
+import Data.Data
+import GHC.Generics (Generic)
+
+import Data.Text (Text, pack)
 import Data.Text.Prettyprint.Doc
 
 -- -----------------------------------------------------------------------------
@@ -49,40 +50,38 @@ data TokenClass
 
 makeLenses ''Token
 
-instance HasLoc Token where
-    loc = tokLoc
+instance HasLocation Token where
+    locOf = _tokLoc
 
-instance HasRegion Token where
-    region = tokLoc . region
 
 -- -----------------------------------------------------------------------------
 -- Extraction
 
 extractId :: Token -> L Text
 extractId (Token c _ l) = case c of
-  TokenVarId  n -> L l n
-  TokenConId  n -> L l n
+  TokenVarId  n -> L n l
+  TokenConId  n -> L n l
   _ -> error "unexpected token"
 
 
 extractInteger :: Token -> L Integer
-extractInteger (Token (TokenInteger v) _ l) = L l v
+extractInteger (Token (TokenInteger v) _ l) = L v l
 extractInteger _ = error "unexpected token"
 
 extractDouble :: Token -> L Double
-extractDouble (Token (TokenDouble v) _ l) = L l v
+extractDouble (Token (TokenDouble v) _ l) = L v l
 extractDouble _ = error "unexpected token"
 
 extractChar :: Token -> L Char
-extractChar (Token (TokenChar v) _ l) = L l v
+extractChar (Token (TokenChar v) _ l) = L v l
 extractChar _ = error "unexpected token"
 
 extractString :: Token -> L String
-extractString (Token (TokenString v) _ l) = L l v
+extractString (Token (TokenString v) _ l) = L v l
 extractString _ = error "unexpected token"
 
 extractBool :: Token -> L Bool
-extractBool (Token (TokenBool v) _ l) = L l v
+extractBool (Token (TokenBool v) _ l) = L v l
 extractBool _ = error "unexpected token"
 
 
@@ -99,10 +98,3 @@ instance Pretty Token where
 instance Pretty TokenClass where
     pretty tc =
       pretty (pack . show $ tc)
-
-
--- -----------------------------------------------------------------------------
--- Serialization Instances
-
-instance Binary Token
-instance Binary TokenClass

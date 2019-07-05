@@ -4,35 +4,24 @@
             , OverloadedStrings
             , TemplateHaskell
             , DeriveDataTypeable
+            , RecordWildCards
+            , ViewPatterns
+            , UndecidableInstances
   #-}
 module Language.Syntax.Location where
 
 import Lens.Micro.Platform
-import Data.Binary
-import Data.Data
 import Data.Foldable
 import Data.Monoid
-import Data.Text (pack)
+
+import Data.Data
 import GHC.Generics (Generic)
 
 import Data.Text.Prettyprint.Doc
 
 
--- Location wrapper
-data L a = L { unLoc :: Loc
-             , unL   :: a
-             }
-  deriving (Eq, Ord, Read, Show, Data, Typeable, Generic)
+data L a = L { unL :: a, unLoc :: Loc }
 
-
-instance Functor L where
-  fmap f (L l a) = L l (f a) 
-
-wrapL :: (a, Loc) -> L a
-wrapL (x, l) = L l x
-
-unwrapL :: L a -> (a, Loc)
-unwrapL (L l x) = (x, l)
 
 
 data Loc
@@ -64,48 +53,56 @@ instance Ord Position where
       | l1 == l2  = c1 `compare` c2
       | otherwise = l1 `compare` l2
 
+makeLenses ''Loc
+makeLenses ''Region
+makeLenses ''Position
 
-makeClassy ''Loc
-makeClassy ''Region
-makeClassy ''Position
 
 -- -----------------------------------------------------------------------------
--- Classy Instances  
+-- Getting Classy  
 
-class Locatable a where
-    locOf :: a -> Loc
+class HasLocation a where
+  locOf :: a -> Loc
 
--- Location can be taken from any foldable functor
-instance {-# OVERLAPPABLE #-} (Foldable f, Functor f, Locatable a) => Locatable (f a) where
-    locOf = fold . fmap locOf
+class HasRegion a where
+  regOf :: a -> Region
 
-instance HasRegion Loc where
-    region = locReg . region
+class HasPosition a where
+  posOf :: a -> Position
 
-
--- Can't make a HasPosition instance for region, since it has two positions!
 
 -- -----------------------------------------------------------------------------
--- Helpers
+-- Instances  
 
-mkRegion :: HasPosition a => a -> a -> Region
-mkRegion start end = R (start^.position) (end^.position)
+instance HasLocation (L a) where
+  locOf = unLoc
 
-stretch :: HasPosition a => a -> Int -> Region
-stretch a n = mkRegion p1 p2
-  where
-    p1@(P l c) = a^.position
-    p2 = P l (c + n)
+instance Functor L where
+  fmap f (L a l) = L (f a) l
 
--- -----------------------------------------------------------------------------
--- Helper Instances
+
+instance Semigroup a => Semigroup (L a) where
+  (<>) (L a l1) (L b l2) = L (a<>b) (l1<>l2)
+
+instance HasLocation Loc where
+  locOf = id
+
+instance HasRegion Region where
+  regOf = id
+
+instance HasPosition Position where
+  posOf = id
+
+
+instance HasLocation a => HasRegion a where
+  regOf = regOf . locOf
+
 
 instance Semigroup Loc where
-    (<>) (Loc fp r1) (Loc _ r2)
-      = Loc fp (r1 <> r2)
+  (<>) (Loc fp1 r1) (Loc fp2 r2)
+    | fp1 == fp2 = Loc fp1 $ r1 <> r2
+    | otherwise  = error $ "Cannot mappend two locations with different file names." 
 
-instance Monoid Loc where
-    mempty = Loc "" mempty
 
 instance Semigroup Region where
     (<>) (R s1 e1) (R s2 e2)
@@ -117,20 +114,32 @@ instance Monoid Region where
       = R (P 0 0) (P 0 0)
 
 
+-- Location can be taken from any foldable functor with location
+instance {-# OVERLAPPABLE #-} (Foldable f, Functor f, HasLocation a) => HasLocation (f a) where
+    locOf = foldl1 (<>) . fmap locOf
+
+-- -----------------------------------------------------------------------------
+-- Helpers
+
+mkRegion :: (HasPosition a, HasPosition b) => a -> b -> Region
+mkRegion start end = R (posOf start) (posOf end)
+
+stretch :: HasPosition a => a -> Int -> Region
+stretch a n = mkRegion p1 p2
+  where
+    p1@(P l c) = posOf a
+    p2 = P l (c + n)
+
+
+(<++>) :: (HasLocation a, HasLocation b) => a -> b -> Loc
+(<++>) a b = locOf a <> locOf b
+
 -- -----------------------------------------------------------------------------
 -- Pretty Instances   
 
-instance Pretty a => Pretty (L a) where
-    pretty (L loc a) =
-      vsep
-        [ pretty a
-        , "located at" <+> pretty loc
-        ]
-
-
 instance Pretty Loc where
-    pretty loc =
-      (pretty . pack $ loc^.locPath) <> ":" <> pretty (loc^.locReg)
+    pretty Loc{..} =
+      pretty _locPath <> ":" <> pretty _locReg
 
 
 instance Pretty Region where
@@ -144,12 +153,3 @@ instance Pretty Region where
 instance Pretty Position where
   pretty (P l c) =
     pretty (l+1) <> ":" <> pretty (c+1)
-
-
--- -----------------------------------------------------------------------------
--- Binary Instances
-
-instance Binary a => Binary (L a)
-instance Binary Loc
-instance Binary Region
-instance Binary Position

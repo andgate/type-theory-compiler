@@ -20,7 +20,8 @@ executable ttc
   main-is:             Main.hs
   other-modules:       Compiler
   -- other-extensions:
-  build-depends:       lltt,
+  build-depends:       language-syntax,
+                       lltt,
                        lltt-llvm,
                        stlc,   
                        base ^>=4.12.0.0,

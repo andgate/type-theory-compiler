@@ -4,16 +4,19 @@
            , ConstraintKinds
            , TupleSections
            , ViewPatterns
+           , OverloadedStrings
            #-}
 module Language.STLC.Desugar where
 
-
+import Language.Syntax.Location
 import Language.STLC.Syntax
+import Language.STLC.Pretty
 import qualified Language.LLTT.Syntax as LL
 
 import Language.STLC.Reduce
 
 import Control.Monad
+import Control.Monad.Reader
 import Data.Bifunctor
 import Data.Maybe
 import Data.List
@@ -24,76 +27,112 @@ import Data.Bitraversable
 import Unbound.Generics.LocallyNameless
 import Unbound.Generics.LocallyNameless.Name (name2String, s2n)
 
+import Data.Text.Prettyprint.Doc
+import Data.Text.Prettyprint.Doc.Render.Text
+
+import System.IO.Unsafe
+import System.Exit (exitFailure)
+
 -- This pass produces a desugared STLC syntax tree.
 -- The end result of desugaring is a Low-Level Type
 -- Theory (LLTT) ast.
 -- This is a form of the STLC which can be easily
 -- translated into LLVM IR.
 
+type MonadDesugar m = (Fresh m, MonadReader Loc m)
+
+withLoc :: MonadDesugar m => Loc -> m a -> m a
+withLoc l = local (const l) 
+
+askLoc :: MonadDesugar m => m Loc
+askLoc = ask
+
 desugarModule :: Module -> LL.Module
-desugarModule (Module n defns)
-  = LL.Module n $ runFreshM $ mapM desugarDefn defns
+desugarModule (Module l n defns)
+  = LL.Module l n $ runFreshM $ runReaderT (mapM desugarDefn defns) l
 
 
-desugarDefn :: Fresh m => Defn -> m LL.Defn
+desugarDefn :: MonadDesugar m => Defn -> m LL.Defn
 desugarDefn = \case
   FuncDefn f -> LL.FuncDefn <$> desugarFunc f
-  ExternDefn ex -> LL.ExternDefn <$> desugarExtern ex
-  DataTypeDefn dt -> LL.DataTypeDefn <$> desugarDataType dt
+  ExternDefn ex -> return $ LL.ExternDefn (desugarExtern ex)
+  DataTypeDefn dt -> return $ LL.DataTypeDefn (desugarDataType dt)
 
-desugarExtern :: Fresh m => Extern -> m LL.Extern
-desugarExtern (Extern n paramtys retty)
-  = return $ LL.Extern n (desugarType <$> paramtys) (desugarType retty)
+desugarExtern :: Extern -> LL.Extern
+desugarExtern (Extern l n paramtys retty)
+  = LL.Extern l n (desugarType <$> paramtys) (desugarType retty)
 
-desugarDataType :: Fresh m => DataType -> m LL.DataType
-desugarDataType (DataType n dt_cons)
-  = return $ LL.DataType n dt_cons'
-  where dt_cons' = (second (second desugarType <$>)) <$> dt_cons      
+desugarDataType :: DataType -> LL.DataType
+desugarDataType (DataType l n cs)
+  = LL.DataType l n (desugarConstrDefn <$> cs)
 
-desugarFunc :: Fresh m => Func -> m LL.Func
-desugarFunc (Func ty fn_n bnd) = do
+
+desugarConstrDefn :: ConstrDefn -> LL.ConstrDefn
+desugarConstrDefn = \case
+  ConstrDefn l n tys -> LL.ConstrDefn l n (desugarType <$> tys)
+  RecordDefn l n ens -> LL.RecordDefn l n (desugarEntry <$> ens)
+
+
+desugarEntry :: Entry -> LL.Entry
+desugarEntry (Entry l n ty) = LL.Entry l n (desugarType ty)
+
+desugarFunc :: MonadDesugar m => Func -> m LL.Func
+desugarFunc (Func l ty fn_n bnd) = withLoc l $ do
   (ps, body) <- unbind bnd
   let ps' = desugarPat <$> ps
   body' <- desugarExp body
-  return $ LL.Func fn_n ps' body'
+  return $ LL.Func l fn_n ps' body'
 
-desugarExp  :: Fresh m => Exp -> m LL.Exp
+desugarExp  :: MonadDesugar m => Exp -> m LL.Exp
 desugarExp (EType e ty) = LL.EType <$> desugarExp' ty e <*> pure (desugarType ty)
-desugarExp e = error $ "desugarExp - Expected typed expression:\n\n" ++ show e ++ "\n\n"
+desugarExp (ELoc e l) = withLoc l $ LL.ELoc <$> desugarExp e <*> pure l
+desugarExp e = do
+  l <- askLoc
+  return $ unsafePerformIO $ do
+    putDoc $ vsep [ line <> pretty l <+> "fatal compiler error:"
+                  , indent 4 $ vsep [ "desugarExp - Expected typed expression."
+                                    , "in"
+                                    , indent 2 $ pretty e
+                                    ]
+                  ]
+    exitFailure
 
 
-desugarExp'  :: Fresh m => Type -> Exp -> m LL.Exp
+desugarExp'  :: MonadDesugar m => Type -> Exp -> m LL.Exp
 desugarExp' ty = \case
   EVar n ->
     return $ LL.EVar . name2String $ n
 
   ELit l -> LL.ELit <$> desugarLit l
 
+  EApp f xs ->
+    LL.ECall <$> desugarExp f <*>  mapM desugarExp xs
+
   EType e ty' -> LL.EType <$> desugarExp' ty' e <*> pure (desugarType ty')
+  ECast e ty' -> LL.ECast <$> desugarExp e <*> pure (desugarType ty')
   
-  EApp f xs -> do
-    f' <- desugarExp f
-    xs' <- mapM desugarExp xs
-    return $ LL.ECall f' (NE.fromList xs')
-  
+  ELoc e l -> withLoc l $ LL.ELoc <$> desugarExp' ty e <*> pure l
+  EParens e -> LL.EParens <$> desugarExp' ty e
+
+  ELam bnd -> error "Unlifted lambda expression encountered!"
+
   ELet bnd -> do
     (unrec -> letbnds, body) <- unbind bnd
-    let (ps, es) = unzip (second unembed <$> letbnds)
+    let (ps, es) = NE.unzip (second unembed <$> letbnds)
     let ps' = desugarPat <$> ps
     es' <- mapM desugarExp es
-    let rhs = zip ps' es'
+    let rhs = NE.zip ps' es'
     body' <- desugarExp body
-    return $ LL.ELet (NE.fromList rhs) body'
+    return $ LL.ELet rhs body'
 
   EIf p t f -> LL.EIf <$> desugarExp p <*> desugarExp t <*> desugarElse f
 
-  ECase e@(EType _ TI32) cls -> do
-    error "Integer case not supported"
-
-  ECase e cls -> do
-    e' <- desugarExp e
-    cls' <- NE.fromList <$> mapM desugarClause cls
-    return $ LL.EMatch e' cls'
+  ECase e cls ->
+    case exTyAnn (exType e) of
+      TCon _ -> LL.EMatch <$> desugarExp e <*> mapM desugarClause cls
+      t | t `elem` intTypes -> LL.EMatchI <$> desugarExp e <*> mapM desugarClause cls
+      _ -> error "Case analysis on unsupported type!"
+      -- At some point, it would be nice if case could work with any type...
 
   ERef e ->
     LL.ERef <$> desugarExp e
@@ -101,6 +140,8 @@ desugarExp' ty = \case
   EDeref e -> 
     LL.EDeref <$> desugarExp e
 
+  ETuple x xs ->
+    LL.ETuple <$> desugarExp x <*> mapM desugarExp xs
 
   ECon n xs ->
     LL.ECon n <$> mapM desugarExp xs
@@ -130,7 +171,7 @@ desugarExp' ty = \case
   e -> error $ "unhandled case: " ++ show e
 
 
-desugarLit :: Fresh m => Lit -> m LL.Lit
+desugarLit :: MonadDesugar m => Lit -> m LL.Lit
 desugarLit = \case
   LInt i     -> pure $ LL.LInt i
   LDouble d  -> pure $ LL.LDouble d
@@ -151,13 +192,18 @@ desugarLit = \case
       _ -> error $ "desugar - expected constant integer! Found: " ++ show i
 
 
-desugarElse :: Fresh m => Else -> m LL.Else
+desugarElse :: MonadDesugar m => Else -> m LL.Else
 desugarElse = \case
-  Else e -> LL.Else <$> desugarExp e
-  Elif p t f -> LL.Elif <$> desugarExp p <*> desugarExp t <*> desugarElse f
+  Else (Just l) e -> withLoc l $ desugarElse $ Else Nothing e
+  Else Nothing e -> LL.Else <$> fmap Just askLoc <*> desugarExp e
+  
+  Elif (Just l) p t f
+    -> withLoc l $ desugarElse $ Elif Nothing p t f
+  Elif Nothing p t f
+    -> LL.Elif <$> fmap Just askLoc <*> desugarExp p <*> desugarExp t <*> desugarElse f
 
 
-desugarOp :: Fresh m => Op -> m LL.Op
+desugarOp :: MonadDesugar m => Op -> m LL.Op
 desugarOp = \case
   OpAddI a b -> LL.OpAddI <$> desugarExp a <*> desugarExp b
   OpSubI a b -> LL.OpSubI <$> desugarExp a <*> desugarExp b
@@ -191,35 +237,53 @@ desugarType = \case
     in LL.TFunc (desugarType retty) (NE.fromList $ desugarType <$> paramtys) 
 
   TCon n  -> LL.TCon n
+  TBool   -> LL.TBool
   TI8     -> LL.TI8
   TI32    -> LL.TI32
   TI64    -> LL.TI64
   TF32    -> LL.TF32
   TF64    -> LL.TF64
-  TBool   -> LL.TBool
-  TChar   -> LL.TChar
+  TTuple t ts -> LL.TTuple (desugarType t) (desugarType <$> ts)
   TArray i ty -> LL.TArray i (desugarType ty)
   TPtr ty -> LL.TPtr (desugarType ty)
-  TString -> LL.TString
-  TVoid   -> LL.TVoid
+  TLoc t l -> LL.TLoc (desugarType t) l
+  TParens t -> LL.TParens (desugarType t)
   
 
 desugarPat :: Pat -> LL.Pat
 desugarPat = \case
-  PVar v     -> LL.PVar (name2String v)
-  PCon n ps  -> LL.PCon n (desugarPat <$> ps)
-  PWild      -> LL.PWild
-  PType p ty -> LL.PType (desugarPat p) (desugarType ty)
+  PVar v      -> LL.PVar (name2String v)
+  PCon n ps   -> LL.PCon n (desugarPat <$> ps)
+  PTuple p ps -> LL.PTuple (desugarPat p) (desugarPat <$> ps)
+  PWild       -> LL.PWild
+  PType p ty  -> LL.PType (desugarPat p) (desugarType ty)
+  PLoc p l    -> LL.PLoc (desugarPat p) l
+  PParens p   -> LL.PParens (desugarPat p)
 
 
-desugarClause :: Fresh m => Clause -> m LL.Clause
-desugarClause (Clause bnd) = do
+
+desugarClause :: MonadDesugar m => Clause -> m LL.Clause
+desugarClause (Clause (Just l) bnd)
+  = withLoc l $ desugarClause (Clause Nothing bnd)
+
+desugarClause (Clause Nothing bnd) = do
   (p, e) <- unbind bnd
   let ns = (Just . fst) <$> patTypedVars p
-  case p of
-    PType (PCon n args) _ -> do
+  case exPAnn p of
+    PCon n args -> do
       e' <- desugarExp e
       return $ LL.Clause n ns e'
 
-    p -> error $ "typed pattern expected, instead found:\n\n" ++ show p ++ "\n\n"
+    p -> do
+      l <- ask
+      error $ show $ vsep [ line <> pretty l <+> "error:"
+                          , indent 4 $ vsep
+                              [ "Simple pattern expected in case clause."
+                              , "Found:" <+> pretty (show (exPAnn p))
+                              , "in"
+                              , pretty (show p) <+> "=" <+> pretty (show e)
+                              ]
+                          , line
+                          ]
+
 

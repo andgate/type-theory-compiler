@@ -1,4 +1,5 @@
-packages: language-module-system/
+packages: report/
+          language-module-system/
           language-syntax/
           lltt/
           lltt-llvm/

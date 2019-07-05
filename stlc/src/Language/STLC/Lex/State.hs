@@ -30,6 +30,6 @@ initialLexState fp =
 makeLenses ''LexState
 
 instance HasRegion LexState where
-  region = lexRegion
+  regOf = _lexRegion
 
 

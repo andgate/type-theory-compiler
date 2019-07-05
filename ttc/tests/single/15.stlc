@@ -1,0 +1,11 @@
+module Main
+
+extern printint : I32 -> I32
+
+main : I32 -> **I8 -> I32
+main argc argv =
+  let a = 1 : F32
+      b = 2 : I32
+      c : I64 = #add (a as I64) (b as I64)
+      _ = printint (c as I64)
+  in 0

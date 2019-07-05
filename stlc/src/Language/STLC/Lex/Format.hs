@@ -10,7 +10,7 @@ module Language.STLC.Lex.Format where
 
 import Lens.Micro.Platform
 import Control.Monad (when, unless, void)
-import Control.Monad.State.Strict (State, evalState)
+import Control.Monad.State.Strict (State, evalState, gets)
 import Language.STLC.Lex.Token
 import Language.Syntax.Location (Loc(..), Region, locReg, regStart, posColumn)
 import Safe (headDef)
@@ -224,7 +224,7 @@ getCellIndent =
 
 getCurrIndent :: Layout Int
 getCurrIndent =
-  use $ layRegion . L.regStart . L.posColumn
+  gets $ L._posColumn . L._regStart . _layRegion
 
   
 setIndent :: Int -> Layout ()

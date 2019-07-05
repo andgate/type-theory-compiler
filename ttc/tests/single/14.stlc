@@ -1,0 +1,23 @@
+module Main
+
+extern printstr : *I8 -> I32
+extern printint : I32 -> I32
+
+addPair : (I32, I32) -> I32
+addPair p =
+  let (a, b) = p
+  in #add a b
+
+printPair : (I32, I32) -> I32
+printPair p =
+  let (a, b) = p
+      _ = printstr "("
+      _ = printint a
+      _ = printstr ", "
+      _ = printint b
+  in printstr ")"
+
+main : I32 -> **I8 -> I32
+main argc argv =
+  let _ = printPair (1, 3)
+  in 0

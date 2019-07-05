@@ -2,6 +2,7 @@
            , FlexibleContexts
            , LambdaCase
            , ViewPatterns
+           , TupleSections
            #-}
 module Language.STLC.Match where
 
@@ -9,9 +10,15 @@ module Language.STLC.Match where
 
 import Control.Monad.Reader
 
+import Data.Bifunctor
+
+import Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NE
+
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
+import Language.Syntax.Location
 import Language.STLC.Syntax
 
 import Unbound.Generics.LocallyNameless
@@ -23,34 +30,46 @@ type Constr = String
 data Env = Env { envArity   :: Map Constr Int
                , envConstrs :: Map Constr [Constr]
                , envConstrTys :: Map Constr Type
+               , envLoc :: Loc
                }
 type MonadMatch m = (MonadReader Env m, Fresh m)
 
+envUpdateLoc :: Loc -> Env -> Env
+envUpdateLoc l env = env { envLoc = l }
+
+withLoc :: MonadMatch m => Loc -> m a -> m a
+withLoc l = local (envUpdateLoc l)
+
 
 matchModule :: Module -> Module
-matchModule (Module n defns)
-  = Module n defns'
-  where env = makeEnv defns
+matchModule (Module l n defns)
+  = Module l n defns'
+  where env = makeEnv l defns
         defns' = runFreshM $ runReaderT (mapM matchDefn defns) env
 
 
-makeEnv :: [Defn] -> Env
-makeEnv modl = Env { envArity = Map.fromList rs
-                   , envConstrs = Map.fromList cs
-                   , envConstrTys = Map.fromList contys
-                   }
+makeEnv :: Loc -> [Defn] -> Env
+makeEnv l modl = Env { envArity = Map.fromList rs
+                     , envConstrs = Map.fromList cs
+                     , envConstrTys = Map.fromList contys
+                     , envLoc = l
+                     }
   where (rs, cs, contys) = foldl (\(rs, cs, contys) (rs', cs', contys') ->
                                       (rs ++ rs', cs ++ cs', contys ++ contys') )
                                  ([],[], [])
                                  $ map go modl
 
-        go :: Defn -> ([(Constr, Int)], [(Constr, [Constr])], [(Constr, Type)]) 
+        -- Extract environment information from datatype definitions
+        go :: Defn 
+           -> ( [(Constr, Int)]      -- ^ Constructor name to constructor arity
+              , [(Constr, [Constr])] -- ^ Constructor name to sibling constructor names
+              , [(Constr, Type)])    -- ^ Constructor name to type
         go = \case
-          DataTypeDefn (DataType dt_n dt_cons) ->
-            let cons = fst <$> dt_cons
-                rs = [(n, length args) | (n, args) <- dt_cons]
-                cs = [(n, cons) | (n, _) <- dt_cons]
-                contys = zip (fst <$> dt_cons) (repeat $ TCon dt_n)
+          DataTypeDefn (DataType _ dt_n dt_cons) ->
+            let cons = constrName <$> dt_cons
+                rs = second constrArity <$> zip cons dt_cons  
+                cs = (,cons) <$> cons                     
+                contys = zip cons (repeat $ TCon dt_n)    
             in (rs, cs, contys)
 
           defn ->
@@ -62,11 +81,11 @@ matchDefn = \case
   defn -> pure defn
 
 matchFunc :: MonadMatch m => Func -> m Func
-matchFunc (Func ty f bnd) = do
+matchFunc (Func l ty f bnd) = withLoc l $ do
   (ps, body) <- unbind bnd
   body' <- matchExp body
   let bnd' = bind ps body'
-  return $ Func ty f bnd'
+  return $ Func l ty f bnd'
 
 matchExp :: MonadMatch m => Exp -> m Exp
 matchExp exp = case exp of
@@ -78,7 +97,7 @@ matchExp exp = case exp of
   ELet bnd -> do
     (unrec -> qs, body) <- unbind bnd
     es' <- mapM (matchExp . unembed . snd) qs
-    let qs' = zip (fst <$> qs) (embed <$> es')
+    let qs' = NE.zip (fst <$> qs) (embed <$> es')
     body' <- matchExp body
     let bnd' = bind (rec qs') body'
     return $ ELet bnd'
@@ -89,10 +108,13 @@ matchExp exp = case exp of
   ECase e@(EType _ ty) clauses -> do
     v <- fresh (s2n "match.e")
     e' <- matchExp e
-    qs <- mapM (\(Clause bnd) -> unbind bnd) clauses
-    es' <- mapM (matchExp . snd) qs
-    let qs' = zip ((pure . fst) <$> qs) es'
-    body <- match [v] qs' (eapp "error" [ELit $ LString "Default match"])
+    qs' <- forM clauses $ \(Clause _ bnd) ->
+            do  (p, body) <- unbind bnd
+                body' <- matchExp body
+                return ([p], e')
+
+    body <- match [v] (NE.toList qs')
+                  (eapp "error" [ELit $ LString "Default match"])
     return $ elet [(PType (PVar v) ty, e')] body
 
   ERef e -> ERef <$> matchExp e
@@ -114,11 +136,17 @@ matchExp exp = case exp of
   ENewStringI i -> ENewStringI <$> matchExp i
 
   EOp op -> EOp <$> matchOp op
+  ELoc e l -> ELoc <$> withLoc l (matchExp e) <*> pure l
 
 matchElse :: MonadMatch m => Else -> m Else
 matchElse = \case
-  Elif p t f -> Elif <$> matchExp p <*> matchExp t <*> matchElse f
-  Else e -> Else <$> matchExp e
+  Elif Nothing p t f
+    -> Elif Nothing <$> matchExp p <*> matchExp t <*> matchElse f
+  Elif (Just l) p t f
+    -> withLoc l $ Elif (Just l) <$> matchExp p <*> matchExp t <*> matchElse f
+  
+  Else Nothing e -> Else Nothing <$> matchExp e
+  Else (Just l) e -> withLoc l $ Else (Just l) <$> matchExp e
 
 matchOp :: MonadMatch m => Op -> m Op
 matchOp = \case
@@ -203,7 +231,8 @@ matchCon (u:us) qs def = do
   cs' <- mapM (\c -> matchClause c (u:us) (choose c qs) def) cs
   let ty = getEqType (head qs)
       uty = getEqPatType (head qs)
-  return $ EType (ECase (EType (EVar u) uty) cs') ty
+  l <- reader envLoc
+  return $ ELoc (EType (ECase (EType (EVar u) uty) (NE.fromList cs')) ty) l
 
 
 matchClause :: MonadMatch m => Constr -> [Var] -> [Equation] -> Exp -> m Clause
@@ -213,7 +242,8 @@ matchClause c (u:us) qs def = do
   k <- arity c
   us' <- mapM (\_ -> fresh (s2n "match.x")) [1..k]
   body <- match (us' ++ us) [(ps' ++ ps, e) | ((PType (PCon n ps') _):ps, e) <- qs] def
-  return $ Clause (bind (PType (PCon c (PType <$> (PVar <$> us') <*> pure ty)) conty)  body)
+  l <- reader envLoc
+  return $ Clause (Just l) (bind (PType (PCon c (PType <$> (PVar <$> us') <*> pure ty)) conty)  body)
 
 choose :: String -> [Equation] -> [Equation]
 choose c qs = [q | q <- qs, getCon q == c]

@@ -82,7 +82,7 @@ compileFile :: FilePath -> FilePath -> IO ()
 compileFile srcPath outPath = do
   let exePath = "tests/bin/single/" <> takeBaseName srcPath
   let buildPath = "tests/build/single/" <> takeBaseName srcPath <> "/"
-  callCommand $ "cabal new-run ttc -- " 
+  callCommand $ "cabal new-run ttc -- +RTS -xc -RTS " 
              ++ srcPath ++ " -o " ++ exePath
              ++ " --build-dir " ++ buildPath
   callCommand $ exePath ++ " > " ++ outPath

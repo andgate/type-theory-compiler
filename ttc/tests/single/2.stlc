@@ -1,6 +1,6 @@
 module Main
 
-extern puts : String -> I32
+extern puts : *I8 -> I32
 
 main: I32 -> **I8 -> I32
 main argc argv =

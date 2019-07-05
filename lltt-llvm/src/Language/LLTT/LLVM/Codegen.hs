@@ -1,10 +1,13 @@
 {-# LANGUAGE OverloadedStrings,
              LambdaCase,
              RecursiveDo,
-             TupleSections
+             TupleSections,
+             ViewPatterns,
+             ConstraintKinds
   #-}
 module Language.LLTT.LLVM.Codegen where
 
+import Language.Syntax.Location
 import qualified Language.LLTT.Syntax as LL
 
 import Prelude hiding (log)
@@ -17,6 +20,7 @@ import Data.ByteString.Short (ShortByteString)
 import qualified Data.ByteString.Short as SBS
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
+import Data.Text.Prettyprint.Doc as PP
 
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
@@ -49,6 +53,7 @@ import Debug.Trace
 log :: String -> a -> a
 log msg a = a -- unsafePerformIO (putStrLn msg) `seq` a
 
+type MonadCodeGen m = (MonadFix m, MonadModuleBuilder m)
 
 data Env = Env { envTypes     :: Map String Type
                , envFuncs     :: Map String Operand
@@ -57,17 +62,22 @@ data Env = Env { envTypes     :: Map String Type
                , envTypeDefs  :: Map String Type
                , envConstrs   :: Map String (String, Type, Type, Int, [Type])
                , envMembers   :: Map String (Type, Int)
+               , envLoc       :: Loc
                }
 
-envEmpty :: Env
-envEmpty = Env { envTypes = mempty
+mkEnv :: Loc -> Env
+mkEnv l = Env { envTypes = mempty
                , envFuncs = mempty
                , envLocals = mempty
                , envSizes = mempty 
                , envTypeDefs = mempty
                , envConstrs = mempty
                , envMembers = mempty
+               , envLoc = l
                }
+
+envGetLoc :: Env -> Loc
+envGetLoc = envLoc 
 
 envInsertTypes :: [(String, Type)] -> Env -> Env
 envInsertTypes types env = foldl' go env types
@@ -79,6 +89,8 @@ envInsertType n ty env = env { envTypes = Map.insert n ty (envTypes env) }
 envLookupType :: String -> Env -> Maybe Type
 envLookupType n env = Map.lookup n (envTypes env)
 
+envSetLoc :: Loc -> Env -> Env
+envSetLoc l env = env { envLoc = l }
 
 envInsertLocals :: [(String, Operand)] -> Env -> Env
 envInsertLocals locals env = foldl' go env locals
@@ -98,7 +110,11 @@ envLookupFunc :: String -> Env -> Operand
 envLookupFunc n env = 
   case Map.lookup n (envFuncs env) of
     Just op -> op
-    Nothing -> error $ "envLookupFunc - Couldn't find function " ++ n
+    Nothing -> 
+      error $ show $ vsep [ PP.line <> pretty (envLoc env) <+> "error:"
+                          , indent 4 $ "envLookupFunc - Couldn't find function:" <+> pretty n
+                          , PP.line
+                          ]
 
 
 envInsertSize :: String -> Int -> Env -> Env
@@ -140,22 +156,23 @@ envLookupMember mem_n env = Map.lookup mem_n (envMembers env)
 
 
 genModule :: Env -> FilePath -> LL.Module -> Module
-genModule env1 srcfp (LL.Module n defns)
+genModule env1 srcfp (LL.Module l n defns)
   = m { moduleSourceFileName = str2sbs srcfp } 
   where
     m = buildModule (str2sbs n) $ mdo
-          env2 <- foldM genDecl env1 defns
+          env2 <- foldM genDecl (env1 {envLoc = l}) defns
           ops <- mapM (genFunc env3) [f | (LL.FuncDefn f) <- defns]
           let env3 = foldl' (\env (n, f, ty) ->
                                   envInsertFunc n f
                                 $ envInsertType n ty env) env2 ops
           return ()
 
-genFunc :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Func -> m (String, Operand, Type)
-genFunc env (LL.Func name args body@(LL.EType _ retty)) = do
-  let paramtys = [ty | LL.PType _ ty <- args]
+genFunc :: (MonadCodeGen m) => Env -> LL.Func -> m (String, Operand, Type)
+genFunc env (LL.Func _ name args body) = do
+  let paramtys = LL.exPType <$> args
       paramtys' = genType env <$> paramtys
       params = map (, NoParameterName) paramtys'
+      retty = LL.exType body
       ty = genType env (LL.TFunc retty (NE.fromList paramtys))
   f' <- function (str2Name name) params (genType env retty) $ \args' -> do
     entry <- block `named` "entry"
@@ -164,10 +181,8 @@ genFunc env (LL.Func name args body@(LL.EType _ retty)) = do
     genBody env' body
   return (name, f', ty)
 
-genFunc env (LL.Func n _ _) =
-  error $ "Codegen error: Function body is untyped for \'" ++ n ++ "\'."
 
-genDecl :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Defn -> m Env
+genDecl :: (MonadCodeGen m) => Env -> LL.Defn -> m Env
 genDecl env = \case
   {-
   LL.FuncDefn (LL.Func n args (LL.EType _ retty))
@@ -183,13 +198,13 @@ genDecl env = \case
     error $ "Codegen error: Function body is untyped for \'" ++ n ++ "\'."
     -}
 
-  LL.ExternDefn ex@(LL.Extern n paramtys retty) -> do
+  LL.ExternDefn ex@(LL.Extern _ n paramtys retty) -> do
     ex' <- genExtern env ex
     return $ envInsertFunc n ex'
            $ envInsertType n (genType env (LL.TFunc retty (NE.fromList paramtys)))
            $ env
   
-  LL.DataTypeDefn dt@(LL.DataType n _) -> do
+  LL.DataTypeDefn dt@(LL.DataType _ n _) -> do
     let s = LL.sizeDataType (envSizes env) dt
     log ("Generating datatype " ++ n ++ " with size " ++ show s) $ return ()
     (ty_n, ty, cons) <- genDataType env s dt
@@ -201,40 +216,49 @@ genDecl env = \case
 
   _ -> return env
 
-genFuncParam :: (MonadFix m, MonadModuleBuilder m) => (Type, Operand) -> IRBuilderT m Operand
+genFuncParam :: (MonadCodeGen m) => (Type, Operand) -> IRBuilderT m Operand
 genFuncParam (ty, op) = do
   ptr <- alloca ty Nothing 4
   store ptr 4 op
   return ptr
 
-genVars :: (MonadFix m, MonadModuleBuilder m) => Env -> [(String, Type)] -> IRBuilderT m Env
+genVars :: (MonadCodeGen m) => Env -> [(String, Type)] -> IRBuilderT m Env
 genVars = foldM genVar
 
-genVar :: (MonadFix m, MonadModuleBuilder m) => Env -> (String, Type) -> IRBuilderT m Env
+genVar :: (MonadCodeGen m) => Env -> (String, Type) -> IRBuilderT m Env
 genVar env (n, ty) = do
   ptr <- alloca ty Nothing 4
   return $ envInsertLocal n ptr
          $ envInsertType n ty
          $ env
 
-genExtern :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Extern -> m Operand
-genExtern env (LL.Extern name argtys retty) =
+genExtern :: (MonadCodeGen m) => Env -> LL.Extern -> m Operand
+genExtern env (LL.Extern _ name argtys retty) =
   extern (str2Name name) (genType env <$> argtys) (genType env retty)
 
-genDataType :: (MonadFix m, MonadModuleBuilder m) => Env -> Int -> LL.DataType -> m (String, Type, [(String, Type, [Type], [Maybe String])])
-genDataType env s dt@(LL.DataType n cons) = do
-  ty <- typedef (str2Name n) (Just $ StructureType False [i8, ArrayType (fromIntegral s) i8] )
+genDataType :: (MonadCodeGen m) => Env -> Int -> LL.DataType -> m (String, Type, [(String, Type, [Type], [Maybe String])])
+genDataType env s dt@(LL.DataType _ n cons) = do
+  ty <- typedef (str2Name n) (Just $ StructureType True [i8, ArrayType (fromIntegral s) i8] )
   let env' = envInsertTypeDef n ty env
-  cons' <- mapM (genDataTypeCon env' n) cons
+  cons' <- mapM (genConstrDefn env' n) cons
   return (n, ty, cons')
 
-genDataTypeCon :: (MonadFix m, MonadModuleBuilder m) => Env -> String -> (String, [(Maybe String, LL.Type)]) -> m (String, Type, [Type], [Maybe String])
-genDataTypeCon env dt_name (con_name, ty_params) = do
-  let n = dt_name ++ "_" ++ con_name
-      ty_params' = (genType env . snd) <$> ty_params
-  (con_name,,,) <$> typedef (str2Name n) (Just $ StructureType True (i8 : ty_params') )
-                <*> pure ty_params'
-                <*> pure (fst <$> ty_params)
+genConstrDefn :: (MonadCodeGen m) => Env -> String -> LL.ConstrDefn -> m (String, Type, [Type], [Maybe String])
+genConstrDefn env dt_name = \case
+  LL.ConstrDefn _ con_n ty_params -> do
+    let n = dt_name ++ "_" ++ con_n
+        ty_params' = genType env <$> ty_params
+    (con_n,,,) <$> typedef (str2Name n) (Just $ StructureType True (i8 : ty_params') )
+               <*> pure ty_params'
+               <*> pure []
+
+  LL.RecordDefn _ con_n (NE.toList -> ens) -> do
+    let n = dt_name ++ "_" ++ con_n
+        ns = [n | LL.Entry l n ty <- ens]
+        ty_params' = [genType env ty | LL.Entry l n ty <- ens]
+    (con_n,,,) <$> typedef (str2Name n) (Just $ StructureType True (i8 : ty_params') )
+               <*> pure ty_params'
+               <*> pure (Just <$> ns)
 
 genType :: Env -> LL.Type -> Type
 genType env = \case
@@ -243,41 +267,39 @@ genType env = \case
       case envLookupTypeDef n env of
         Nothing -> error $ "undefined type encountered: " ++ n
         Just ty -> ty
+  LL.TBool -> i1
   LL.TI8 -> i8
   LL.TI32 -> i32
   LL.TI64 -> i64
   LL.TF32 -> float
   LL.TF64 -> double
-  LL.TChar -> i8
+  LL.TTuple t (NE.toList -> ts) ->
+    StructureType True (genType env <$> (t:ts))
   LL.TArray i ty -> ArrayType (fromIntegral i) (genType env ty)
-  LL.TBool -> i1
   LL.TPtr t -> Ty.ptr (genType env t)
-  LL.TString -> Ty.ptr i8
-  LL.TVoid -> Ty.void
   LL.TFunc retty paramtys -> Ty.FunctionType (genType env retty)
                                              (genType env <$> NE.toList paramtys)
                                              False
 
-genBody :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Exp -> IRBuilderT m ()
+  LL.TLoc t _ -> genType env t
+  LL.TParens t -> genType env t
+
+genBody :: (MonadCodeGen m) => Env -> LL.Exp -> IRBuilderT m ()
 genBody env body = do
   body' <- genExp env body
   r <- load body' 4
   ret r
 
-
-loadExp :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Exp -> IRBuilderT m Operand
+loadExp :: (MonadCodeGen m) => Env -> LL.Exp -> IRBuilderT m Operand
 loadExp env e = do
   e_ptr <- genExp env e
   load e_ptr 4
 
 
-genExp :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Exp -> IRBuilderT m Operand
-genExp env e@(LL.EType _ ty) = do
-  op <- log ("Generating expression " ++ show e)
-                                  $ genExp' env ty e
-  log ("Exp gen successful: " ++ show op) $ return op
+genExp :: (MonadCodeGen m) => Env -> LL.Exp -> IRBuilderT m Operand
+genExp env e = genExp' env (LL.exType e) e
 
-genExp' :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Type -> LL.Exp -> IRBuilderT m Operand
+genExp' :: (MonadCodeGen m) => Env -> LL.Type -> LL.Exp -> IRBuilderT m Operand
 genExp' env rty = \case
   LL.EVar n -> case envLookupLocal n env of
     Nothing -> do
@@ -315,25 +337,42 @@ genExp' env rty = \case
 
   LL.ELit l -> genLit env rty l
 
-  LL.ECall f@(LL.EType _ (LL.TFunc retty paramtys)) xs -> mdo
-
+  LL.ECall f@((LL.exTyAnn . LL.exType) -> (LL.TFunc retty paramtys)) xs -> mdo
     br call_init
+    
     call_init <- block `named` "call.init"
     r_ptr <- alloca (genType env retty) Nothing 4
+    br call_gen_func
+
+    call_gen_func <- block `named` "call.gen.func"
     f' <- genExp env f
-    xs' <- mapM (loadExp env) (NE.toList xs)
+    br call_gen_args
+
+    call_gen_args <- block `named` "call.gen.args"
+    xs' <- mapM (genExp env) (NE.toList xs)
+    br call_load_args
+
+    call_load_args <- block `named` "call.load.args"
+    xs'' <- mapM (`load` 4) xs'
     br call_app
 
     call_app <- block `named` "call.app"
-    r <- call f' [(x, []) | x <- xs']
+    r <- call f' $(,[]) <$> xs''
     store r_ptr 4 r
     return r_ptr
 
   LL.ECall f xs -> error $ "genExp - Expected a typed function.\n\n"
                        ++ show f ++ " " ++ show xs ++ "\n\n"
 
-  LL.EType e rty' ->
-    genExp' env rty' e
+  LL.EType e rty' -> genExp' env rty' e
+
+  LL.ECast e ty -> do
+    e' <- genExp env e
+    let ty' = genType env ty
+    bitcast e' ty'
+
+  LL.ELoc e l -> genExp' env{envLoc = l} rty e
+  LL.EParens e -> genExp' env rty e
 
   LL.ELet qs body -> mdo
     br let_header
@@ -346,7 +385,7 @@ genExp' env rty = \case
           br rhs_blk
 
           rhs_blk <- block `named` "let.header.rhs"
-          op <- log ("genELet is generating e: " ++ show e) $ genExp env' e
+          op <- genExp env' e
           br lhs_init_blk
 
           lhs_init_blk <- block `named` "let.header.lhs.init"
@@ -420,6 +459,30 @@ genExp' env rty = \case
                $ genExp env e 
     load e_ptr_ptr 4
 
+
+  LL.ETuple e (NE.toList -> es) -> mdo
+    br tuple_init_blk
+
+    tuple_init_blk <- block `named` "tuple.init"
+    ty_ptr <- alloca (genType env rty) Nothing 4
+    br tuple_gen_blk
+
+    tuple_gen_blk <- block `named` "tuple.gen"
+    e_ptrs' <- mapM (genExp env) (e:es)
+    br tuple_load_blk
+    
+    tuple_load_blk <- block `named` "tuple.load"
+    es' <- mapM (`load` 4) e_ptrs'
+    br tuple_store_blk
+
+    tuple_store_blk <- block `named` "tuple.store"
+    let go (e', i)= do
+          e_ptr' <- gep ty_ptr [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 (fromIntegral i)]
+          store e_ptr' 4 e'
+    mapM_ go (zip es' [0..])
+
+    return ty_ptr
+
   LL.ECon n args ->
     case envLookupConstr n env of
       Nothing -> error $ "undefined constructor: " ++ n
@@ -440,7 +503,6 @@ genExp' env rty = \case
         mapM_ (genConstrArg env con_ptr) (zip args' [1..])
 
         return ty_ptr
-
 
   LL.ENewCon n args -> do
     case envLookupConstr n env of
@@ -574,22 +636,18 @@ genExp' env rty = \case
   LL.EOp op ->
     genOp env op
 
-  e -> error $ "genExp - Unsupported expression:\n\n"
-            ++ show e ++ "\n\n"
 
-
-
-genConstrArg :: (MonadFix m, MonadModuleBuilder m) => Env -> Operand -> (Operand, Int) -> IRBuilderT m ()
+genConstrArg :: (MonadCodeGen m) => Env -> Operand -> (Operand, Int) -> IRBuilderT m ()
 genConstrArg env ptr (arg_ptr, i) = do
   eptr <- gep ptr [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 (fromIntegral i)]
   arg <- load arg_ptr 4
   store eptr 4 arg
 
 
-genLit :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Type -> LL.Lit -> IRBuilderT m Operand
+genLit :: (MonadCodeGen m) => Env -> LL.Type -> LL.Lit -> IRBuilderT m Operand
 genLit env ty = \case
   LL.LInt i ->
-    case ty of
+    case (LL.exTyAnn ty) of
       LL.TI8 -> do
         ptr <- alloca i8 Nothing 4
         store ptr 4 (ConstantOperand $ C.Int 8 (toInteger i))
@@ -670,12 +728,13 @@ genLit env ty = \case
 
   l -> error $ "genLit - undefined case encountered: " ++ show l
 
-genElse :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Else -> IRBuilderT m Operand
+genElse :: (MonadCodeGen m) => Env -> LL.Else -> IRBuilderT m Operand
 genElse env = \case
-  LL.Else e -> genExp env e
-  LL.Elif p t@(LL.EType _ ty) f -> genExp env (LL.EType (LL.EIf p t f) ty)
+  LL.Else _ e -> genExp env e
+  LL.Elif _ p t@(LL.exType -> ty) f ->
+   genExp env (LL.EType (LL.EIf p t f) ty)
 
-genOp :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Op -> IRBuilderT m Operand
+genOp :: (MonadCodeGen m) => Env -> LL.Op -> IRBuilderT m Operand
 genOp env = \case
   LL.OpAddI a b -> genBinaryOp env add LL.TI32 a b
   LL.OpSubI a b -> genBinaryOp env sub LL.TI32 a b
@@ -704,7 +763,7 @@ genOp env = \case
 
 genBinaryOp :: (MonadFix m, MonadModuleBuilder m)
             => Env -> (Operand -> Operand -> IRBuilderT m Operand) -> LL.Type -> LL.Exp -> LL.Exp -> IRBuilderT m Operand
-genBinaryOp env instr retty a@(LL.EType _ ty) b = do
+genBinaryOp env instr retty a b = do
     a' <- loadExp env a 
     b' <- loadExp env b
     
@@ -718,13 +777,13 @@ genBinaryOp env instr retty a@(LL.EType _ ty) b = do
 -- Pattern variable extraction
 -----------------------------------------------------------------------
 
-genPatAlloc :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Pat -> IRBuilderT m Env
+genPatAlloc :: (MonadCodeGen m) => Env -> LL.Pat -> IRBuilderT m Env
 genPatAlloc env p = genVars env (second (genType env) <$> LL.patFreeTyped p)
 
-genPatInit :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Pat -> Operand -> IRBuilderT m ()
-genPatInit env p@(LL.PType _ ty) op = genPatInit' env p ty op
+genPatInit :: (MonadCodeGen m) => Env -> LL.Pat -> Operand -> IRBuilderT m ()
+genPatInit env p op = genPatInit' env p (LL.exPType p) op
 
-genPatInit' :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Pat -> LL.Type -> Operand -> IRBuilderT m ()
+genPatInit' :: (MonadCodeGen m) => Env -> LL.Pat -> LL.Type -> Operand -> IRBuilderT m ()
 genPatInit' env p ty op = case p of
   LL.PVar n -> do
     case envLookupLocal n env of
@@ -739,23 +798,28 @@ genPatInit' env p ty op = case p of
       Just (_, _, con_ty, i, _) -> do
         con_op <- bitcast op (Ty.ptr $ con_ty)
         let go (p, i) = do
-              arg_op <- log "PCon accessing gep" $ gep con_op [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 i]
+              arg_op <- gep con_op [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 i]
               genPatInit env p arg_op
         mapM_ go (zip ps [1..])
 
+  LL.PTuple p (NE.toList -> ps) -> do
+    let go (p, i) = do
+          arg_op <- gep op [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 i]
+          genPatInit env p arg_op
+    mapM_ go (zip (p:ps) [0..])
+
   LL.PWild -> return ()
-
-  LL.PType p LL.TVoid -> return ()
   LL.PType p ty' -> genPatInit' env p ty' op
+  LL.PLoc p _  -> genPatInit' env p ty op
+  LL.PParens p -> genPatInit' env p ty op
 
-genPatExtractMany :: (MonadFix m, MonadModuleBuilder m) => Env -> [(LL.Pat, Operand)] -> IRBuilderT m Env
+genPatExtractMany :: (MonadCodeGen m) => Env -> [(LL.Pat, Operand)] -> IRBuilderT m Env
 genPatExtractMany = foldM (\env (p, op) -> genPatExtract env p op)
 
-genPatExtract :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Pat -> Operand -> IRBuilderT m Env
-genPatExtract env p@(LL.PType _ pty) op = genPatExtract' env p pty op
-genPatExtract _ p _ = error $ "Expected typed expression, found: " ++ show p
+genPatExtract :: (MonadCodeGen m) => Env -> LL.Pat -> Operand -> IRBuilderT m Env
+genPatExtract env p@(LL.exPType -> pty) op = genPatExtract' env p pty op
 
-genPatExtract' :: (MonadFix m, MonadModuleBuilder m) => Env -> LL.Pat -> LL.Type -> Operand -> IRBuilderT m Env
+genPatExtract' :: (MonadCodeGen m) => Env -> LL.Pat -> LL.Type -> Operand -> IRBuilderT m Env
 genPatExtract' env p pty op = case p of
   LL.PVar n -> do
     let ty' = genType env pty
@@ -768,16 +832,21 @@ genPatExtract' env p pty op = case p of
       Nothing -> error $ "undefined constructor: " ++ n
       Just (_, _, con_ty, i, _) -> do
         con_op <- bitcast op (Ty.ptr $ con_ty)
-        let go (env, i) p = do
-              op' <- log "PCon accessing gep" $ gep con_op [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 i]
-              env' <- genPatExtract env p op'
-              return (env', i+1)
-        fst <$> foldM go (env, 1) ps
+        let go env (p, i) = do
+              op' <- gep con_op [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 i]
+              genPatExtract env p op'
+        foldM go env (zip ps [1..])
+
+  LL.PTuple p (NE.toList -> ps) -> do
+    let go env (p, i) = do
+          op' <- gep op [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 i]
+          genPatExtract env p op'
+    foldM go env (zip (p:ps) [0..])
 
   LL.PWild -> return env
-
-  LL.PType p LL.TVoid -> return env
   LL.PType p pty' -> genPatExtract' env p pty' op
+  LL.PLoc p _ -> genPatExtract' env p pty op
+  LL.PParens p -> genPatExtract' env p pty op
 
 
 -- Case Generation

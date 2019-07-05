@@ -108,16 +108,15 @@ hawk :-
   \<                              { rsvp }
   \>                              { rsvp }
 
+  "Bool"                          { rsvp }
   "I8"                            { rsvp }
   "I32"                           { rsvp }
   "I64"                           { rsvp }
   "F32"                           { rsvp }
   "F64"                           { rsvp }
-  "Bool"                          { rsvp }
-  "Char"                          { rsvp }
   "Array"                         { rsvp }
   "String"                        { rsvp }
-  "Void"                          { rsvp }
+  "null"                          { rsvp }
 
   "module"                        { rsvp }
   "import"                        { rsvp }
@@ -206,9 +205,9 @@ tag text tc = do
 
 moveRegion :: Int -> Lex ()
 moveRegion len = do
-  r1 <- use regEnd
-  regStart .= r1 
-  regEnd . posColumn += len
+  r1 <- use $ lexRegion . regEnd
+  lexRegion . regStart .= r1 
+  lexRegion . regEnd . posColumn += len
 
 
 growRegion :: Int -> Lex ()
@@ -218,17 +217,17 @@ growRegion len =
   
 nextLineBreak :: Lex ()
 nextLineBreak = do
-  regStart . posLine += 1
-  regStart . posColumn .= 0
+  lexRegion . regStart . posLine += 1
+  lexRegion . regStart . posColumn .= 0
 
-  regEnd . posLine += 1
-  regEnd . posColumn .= 0
+  lexRegion . regEnd . posLine += 1
+  lexRegion . regEnd . posColumn .= 0
 
 
 nextLineContinue :: Lex ()
 nextLineContinue = do
-  regEnd . posLine += 1
-  regEnd . posColumn .= 0
+  lexRegion . regEnd . posLine += 1
+  lexRegion . regEnd . posColumn .= 0
 
 
 yieldTokAt :: TokenClass -> LexAction
@@ -309,7 +308,7 @@ handleChar text len = do
       "\\n"   -> yieldCharAt '\n'
       "\\r"   -> yieldCharAt '\r'
       "\'"   -> yieldCharAt '\''
-      (c:_)  -> yieldCharAt c
+      (c:[])  -> yieldCharAt c
       _      -> throwError $ InvalidCharLit text
 
 
