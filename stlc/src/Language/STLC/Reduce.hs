@@ -1,6 +1,7 @@
 {-# LANGUAGE LambdaCase
            , ConstraintKinds
            , FlexibleContexts
+           , ViewPatterns
            #-}
 module Language.STLC.Reduce where
 
@@ -103,7 +104,10 @@ reduce = \case
   ENewString s -> return $ Left $ ENewString s
   ENewStringI e -> return $ Left $ ENewStringI e
 
-  EOp op -> reduceOp op
+  EOp op -> do
+    may_op' <- reduceOp op
+    case may_op' of
+      Left -> return EOp
 
 
 reduceLit :: MonadReduce m => Lit -> m (Either Lit Lit)
@@ -157,17 +161,20 @@ extractPat (pat, e)
 
 reduceOp :: MonadReduce m => Op -> m (Either Exp Exp)
 reduceOp = \case
-  OpAddI a b -> reduceBinaryOpI OpAddI (+) a b
-  OpSubI a b -> reduceBinaryOpI OpAddI (-) a b
-  OpMulI a b -> reduceBinaryOpI OpAddI (*) a b
+  OpAdd a b -> reduceBinaryOpI OpAdd (+) (+) a b
+  OpSub a b -> reduceBinaryOpI OpAdd (-) (-) a b
+  OpMul a b -> reduceBinaryOpI OpAdd (*) (*) a b
+  OpDiv a b -> reduceBinaryOpI OpAdd (/) (/) a b
 
   _ -> error $ "Unsupported operator encountered!"
 
 
 reduceBinaryOpI :: MonadReduce m
-               => (Exp -> Exp -> Op) -> (Int -> Int -> Int)
+               => (Exp -> Exp -> Op)
+               -> (Int -> Int -> Int)
+               -> (Double -> Double -> Double)
                -> Exp -> Exp -> m (Either Exp Exp)
-reduceBinaryOpI constr instr a b = do
+reduceBinaryOpI constr instr instrf a b = do
   some_a' <- reduce a
   case some_a' of
     Right a' -> return $ Right $ EOp $ constr a' b
@@ -179,5 +186,14 @@ reduceBinaryOpI constr instr a b = do
           case (a', b') of
             (ELit (LInt x), ELit (LInt y)) ->
               return $ Left $ ELit (LInt (instr x y))
+
+            (ELit (LDouble x), ELit (LDouble y)) ->
+              return $ Left $ ELit (LDouble (instrf x y))
+
+            (ELit (LInt (fromIntegral -> x)), ELit (LDouble y)) ->
+              return $ Left $ ELit (LDouble (instrf x y))
+
+            (ELit (LDouble x), ELit (LInt (fromIntegral -> y))) ->
+              return $ Left $ ELit (LDouble (instrf x y))
             
             _ -> return $ Left $ EOp $ constr a' b'

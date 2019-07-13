@@ -75,19 +75,18 @@ sizeEntry sizes (Entry _ _ ty) = sizeType sizes ty
 
 sizeType :: Map String Int -> Type -> Int
 sizeType sizes = \case
+  TVar _ -> 8 -- size of pointer, since its boxed. Might change later
   TCon n -> case Map.lookup n sizes of
     Nothing -> error "DataType not registered"
     Just i -> i
-  TVar _ -> 8
-  TI8 -> 1
-  TI32 -> 4
-  TI64 -> 8
-  TF32 -> 4
-  TF64 -> 8
-  TBool -> 1
+  TInt  s -> ceiling $ (fromIntegral s) / (8.0 :: Double)
+  TUInt s -> ceiling $ (fromIntegral s) / (8.0 :: Double)
+  TFp   s -> ceiling $ (fromIntegral s) / (8.0 :: Double) 
   TTuple t1 ts -> sizeType sizes t1 + foldl (\s t -> sizeType sizes t + s) (0 :: Int) ts
-  TArray n ty -> n + sizeType sizes ty
-  TPtr _ -> 8
+  TArray n ty -> n * sizeType sizes ty
+  TVect  n ty -> n * sizeType sizes ty
+  TPtr _ -> 8 -- asssume 64-bit system
+  TFunc _ _ -> 8 -- size of pointer 
   TLoc t _ -> sizeType sizes t
   TParens t -> sizeType sizes t
 
@@ -109,7 +108,6 @@ data Exp
 
   | ELet (NonEmpty (Pat, Exp)) Exp
   | EIf Exp Exp Else
-  | EMatchI Exp (NonEmpty Clause)  -- ^ This will disappear, hopefully
   | EMatch Exp (NonEmpty Clause)
 
   | ERef Exp
@@ -128,10 +126,11 @@ data Exp
   | ENewArray [Exp]
   | ENewArrayI Exp
   | EResizeArray Exp Exp
-  | EArrayElem Exp Exp
+
+  | ENewVect [Exp]
+  | ENewVectI Exp
 
   | ENewString String
-  | ENewStringI Exp
 
   | EOp Op
   deriving(Show)
@@ -155,14 +154,15 @@ exType = \case
 -- Literals
 data Lit
   = LNull
-  | LInt Int
+  | LInt Integer
   | LDouble Double
   | LBool Bool
   | LChar Char
   | LString String
-  | LStringI Int
   | LArray [Exp]
   | LArrayI Int
+  | LVect [Exp]
+  | LVectI Int
   | LGetI Exp Int
   deriving(Show)
 
@@ -174,25 +174,21 @@ data Else
 
 -- Operations
 data Op
-  = OpAddI Exp Exp
-  | OpSubI Exp Exp
-  | OpMulI Exp Exp
-  | OpDivI Exp Exp
-  | OpRemI Exp Exp
+  = OpAdd Exp Exp
+  | OpSub Exp Exp
+  | OpMul Exp Exp
+  | OpDiv Exp Exp
+  | OpRem Exp Exp
   | OpNeg Exp
-  
-  | OpAddF Exp Exp
-  | OpSubF Exp Exp
-  | OpMulF Exp Exp
-  | OpDivF Exp Exp
-  | OpRemF Exp Exp
 
   | OpAnd Exp Exp
   | OpOr  Exp Exp
   | OpXor Exp Exp
+  | OpShR Exp Exp
+  | OpShL Exp Exp
 
-  | OpEqI Exp Exp
-  | OpNeqI Exp Exp
+  | OpEq Exp Exp
+  | OpNeq Exp Exp
   | OpLT Exp Exp
   | OpLE Exp Exp
   | OpGT Exp Exp
@@ -207,14 +203,12 @@ data Op
 data Type
   = TVar String
   | TCon String
-  | TBool
-  | TI8
-  | TI32
-  | TI64
-  | TF32
-  | TF64
+  | TInt Int
+  | TUInt Int
+  | TFp Int
   | TTuple Type (NonEmpty Type)
   | TArray Int Type
+  | TVect Int Type
   | TPtr Type
   | TFunc Type (NonEmpty Type)
   | TLoc Type Loc
@@ -227,6 +221,48 @@ exTyAnn = \case
   TLoc t _ -> exTyAnn t
   TParens t -> exTyAnn t
   t -> t
+
+intSizes :: [Int]
+intSizes = [1, 8, 16, 32, 64]
+
+uintSizes :: [Int]
+uintSizes = [8, 16, 32, 64]
+
+floatSizes :: [Int]
+floatSizes = [16, 32, 64, 128]
+
+intTypes :: [Type]
+intTypes = TInt <$> intSizes
+
+uintTypes :: [Type]
+uintTypes = TUInt <$> uintSizes
+
+floatTypes :: [Type]
+floatTypes = TFp <$> floatSizes
+
+numTypes :: [Type]
+numTypes = intTypes <> uintTypes <> floatTypes
+
+isIntTy :: Type -> Bool
+isIntTy (exTyAnn -> TInt _) = True
+isIntTy _ = False
+
+isUIntTy :: Type -> Bool
+isUIntTy (exTyAnn -> TUInt _) = True
+isUIntTy _ = False
+
+isFloatTy :: Type -> Bool
+isFloatTy (exTyAnn -> TFp _) = True
+isFloatTy _ = False
+
+isPtrTy :: Type -> Bool
+isPtrTy (exTyAnn -> ty) = 
+  case ty of
+    TArray _ _ -> True
+    TVect _ _ -> True
+    TPtr _ -> True
+    TFunc _ _ -> True
+    _ -> False
 
 
 ---------------------------------------------------------------------------
@@ -260,7 +296,7 @@ patFreeTyped p = patFreeTyped' (exPType p) p
 patFreeTyped' :: Type -> Pat -> [(String, Type)]
 patFreeTyped' ty = \case
   PVar n -> [(n, ty)]
-  PCon n ps -> concatMap patFreeTyped ps
+  PCon _ ps -> concatMap patFreeTyped ps
   PTuple p (NE.toList -> ps) ->
     concatMap patFreeTyped (p:ps)
   PWild -> []

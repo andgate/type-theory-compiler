@@ -43,6 +43,9 @@ import Data.Text.Prettyprint.Doc
   '*'                { Token (TokenRsvp "*") _ $$ }
   '&'                { Token (TokenRsvp "&") _ $$ }
 
+  '<['               { Token (TokenRsvp "]>") _ $$ }
+  ']>'               { Token (TokenRsvp "<[") _ $$ }
+
   '{'                { Token (TokenRsvp "{") _ $$ }
   '}'                { Token (TokenRsvp "}") _ $$ }
   '('                { Token (TokenRsvp "(") _ $$ }
@@ -50,14 +53,24 @@ import Data.Text.Prettyprint.Doc
   '['                { Token (TokenRsvp "[") _ $$ }
   ']'                { Token (TokenRsvp "]") _ $$ }
 
-  'I8'               { Token (TokenRsvp "I8" ) _ $$ }
-  'Bool'             { Token (TokenRsvp "Bool" ) _ $$ }
+  'I1'               { Token (TokenRsvp  "I1" ) _ $$ }
+  'I8'               { Token (TokenRsvp  "I8" ) _ $$ }
+  'I16'              { Token (TokenRsvp "I16" ) _ $$ }
   'I32'              { Token (TokenRsvp "I32" ) _ $$ }
   'I64'              { Token (TokenRsvp "I64" ) _ $$ }
-  'F32'              { Token (TokenRsvp "F32" ) _ $$ }
-  'F64'              { Token (TokenRsvp "F64" ) _ $$ }
-  'Array'            { Token (TokenRsvp "Array" ) _ $$ }
-  'String'           { Token (TokenRsvp "String" ) _ $$ }
+
+  'U8'               { Token (TokenRsvp  "U8" ) _ $$ }
+  'U16'              { Token (TokenRsvp "U16" ) _ $$ }
+  'U32'              { Token (TokenRsvp "U32" ) _ $$ }
+  'U64'              { Token (TokenRsvp "U64" ) _ $$ }
+
+  'F16'              { Token (TokenRsvp  "F16" ) _ $$ }
+  'F32'              { Token (TokenRsvp  "F32" ) _ $$ }
+  'F64'              { Token (TokenRsvp  "F64" ) _ $$ }
+  'F128'             { Token (TokenRsvp "F128" ) _ $$ }
+
+  'Array'            { Token (TokenRsvp  "Array" ) _ $$ }
+  'Vect'             { Token (TokenRsvp   "Vect" ) _ $$ }
 
   'let'              { Token (TokenRsvp "let"   ) _ $$ }
   'in'               { Token (TokenRsvp "in"   ) _ $$ }
@@ -90,15 +103,11 @@ import Data.Text.Prettyprint.Doc
   '#rem'             { Token (TokenPrimId "#rem") _ $$ }
   '#neg'             { Token (TokenPrimId "#nef") _ $$ }
 
-  '#fadd'            { Token (TokenPrimId "#fadd") _ $$ }
-  '#fsub'            { Token (TokenPrimId "#fsub") _ $$ }
-  '#fmul'            { Token (TokenPrimId "#fmul") _ $$ }
-  '#fdiv'            { Token (TokenPrimId "#fdiv") _ $$ }
-  '#frem'            { Token (TokenPrimId "#frem") _ $$ }
-
   '#and'             { Token (TokenPrimId "#and") _ $$ }
-  '#or'              { Token (TokenPrimId "#or") _ $$ }
+  '#or'              { Token (TokenPrimId  "#or") _ $$ }
   '#xor'             { Token (TokenPrimId "#xor") _ $$ }
+  '#shr'             { Token (TokenPrimId "#shr") _ $$ }
+  '#shl'             { Token (TokenPrimId "#shl") _ $$ }
 
   '#eq'              { Token (TokenPrimId "#eq") _ $$ }
   '#neq'             { Token (TokenPrimId "#neq") _ $$ }
@@ -325,13 +334,20 @@ bexp :: { Exp }
   | con_id some(aexp)         { ELoc (ECon (unL $1) $2) ($1 <++> $2) }
   | 'new' con_id              { ELoc (ENewCon (unL $2) []) (locOf $1) }
   | 'new' con_id some(aexp)   { ELoc (ENewCon (unL $2) $3) ($1 <++> $2) }
-  | 'new' 'String' aexp       { ELoc (ENewStringI $3) ($1 <++> $3) }
-  | 'new' '[' ']' aexp        { ELoc (ENewArrayI $4) ($1 <++> $4) }
+
+  | 'new' 'Array' '[' exp ']' 
+                              { ELoc (ENewArrayI $4) ($1 <++> $5) }
   | 'new' '[' sep_by1(exp, ',') ']'
                               { ELoc (ENewArray $3) ($1<>$4) }
+
+  | 'new' 'Vect' '<[' exp ']>'
+                              { ELoc (ENewVectI $4) ($1 <++> $5) }
+  | 'new' '<[' sep_by1(exp, ',') ']>'
+                              { ELoc (ENewVect $3) ($1<>$4) }
+
   | 'delete' aexp             { ELoc (EFree $2) ($1 <++> $2) }
-  | 'String' aexp             { ELoc (ELit (LStringI $2)) ($1 <++> $2) }
   | aexp { $1 }
+
 
 aexp :: { Exp }
   : var_id            { ELoc (evar (unL $1)) (locOf $1) }
@@ -340,35 +356,41 @@ aexp :: { Exp }
   | '&' aexp          { ELoc (ERef $2) ($1<++>$2) }
   | '*' aexp          { ELoc (EDeref $2) ($1<++>$2) }
   | aexp '.' var_id   { ELoc (EGet $1 (unL $3)) ($1<++>$3) }
+  
   | aexp '[' exp ']'  { ELoc (EGetI $1 $3) ($1<++>$4) }
+  
   | '[' sep_by1(exp, ',') ']' 
                       { ELoc (ELit (LArray $2)) ($1<>$3) }
-  | '[' ']' aexp      { ELoc (ELit (LArrayI $3)) ($1<++>$3) }
+  | 'Array' '[' aexp ']'  
+                      { ELoc (ELit (LArrayI $3)) ($1<++>$4) }
+
+  | '<[' sep_by1(exp, ',') ']>'
+                      { ELoc (ELit (LVect $2)) ($1<>$3) }
+  | 'Vect' '<[' aexp ']>' { ELoc (ELit (LVectI $3)) ($1<++>$4) }
+  
   | '(' exp ',' sep_by1_ne(exp, ',') ')'
                       { ELoc (ETuple $2 $4) ($1<>$5) }
   | '(' exp ')'       { ELoc $2 ($1<>$3) }
 
 
 primOp :: { L Op }
-  : '#add' aexp aexp { L (OpAddI $2 $3) ($1<++>$3) }
-  | '#sub' aexp aexp { L (OpSubI $2 $3) ($1<++>$3) }
-  | '#mul' aexp aexp { L (OpMulI $2 $3) ($1<++>$3) }
-  | '#div' aexp aexp { L (OpDivI $2 $3) ($1<++>$3) }
-  | '#rem' aexp aexp { L (OpRemI $2 $3) ($1<++>$3) }
+  : '#add' aexp aexp { L (OpAdd $2 $3) ($1<++>$3) }
+  | '#sub' aexp aexp { L (OpSub $2 $3) ($1<++>$3) }
+  | '#mul' aexp aexp { L (OpMul $2 $3) ($1<++>$3) }
+  | '#div' aexp aexp { L (OpDiv $2 $3) ($1<++>$3) }
+  | '#rem' aexp aexp { L (OpRem $2 $3) ($1<++>$3) }
   | '#neg' aexp      { L (OpNeg $2)     ($1<++>$2) }
-
-  | '#fadd' aexp aexp { L (OpAddF $2 $3) ($1<++>$3) }
-  | '#fsub' aexp aexp { L (OpSubF $2 $3) ($1<++>$3) }
-  | '#fmul' aexp aexp { L (OpMulF $2 $3) ($1<++>$3) }
-  | '#fdiv' aexp aexp { L (OpDivF $2 $3) ($1<++>$3) }
-  | '#frem' aexp aexp { L (OpRemF $2 $3) ($1<++>$3) }
 
   | '#and' aexp aexp { L (OpAnd $2 $3) ($1<++>$3) }
   | '#or'  aexp aexp { L (OpOr $2 $3)  ($1<++>$3) }
   | '#xor' aexp aexp { L (OpXor $2 $3) ($1<++>$3) }
+  | '#shr' aexp aexp { L (OpShr $2 $3) ($1<++>$3) }
+  | '#shl' aexp aexp { L (OpShL $2 $3) ($1<++>$3) }
+
 
   | '#eq'  aexp aexp { L (OpEqI $2 $3)  ($1<++>$3) }
   | '#neq' aexp aexp { L (OpNeqI $2 $3) ($1<++>$3) }
+
   | '#lt'  aexp aexp { L (OpLT $2 $3) ($1<++>$3) }
   | '#le'  aexp aexp { L (OpLE $2 $3) ($1<++>$3) }
   | '#gt'  aexp aexp { L (OpGT $2 $3) ($1<++>$3) }
@@ -397,12 +419,22 @@ atype :: { Type }
 
 
 primType :: { Type }
-  : 'I8' { TLoc TI8 (locOf $1) }
-  | 'I32' { TLoc TI32 (locOf $1) }
-  | 'I64' { TLoc TI64 (locOf $1) }
-  | 'F32' { TLoc TF32 (locOf $1) }
-  | 'F64' { TLoc TF64 (locOf $1) }
-  | 'Bool' { TLoc TBool (locOf $1) }
+  : 'I1'  { TLoc (TInt  1) (locOf $1) }
+  | 'I8'  { TLoc (TInt  8) (locOf $1) }
+  | 'I16' { TLoc (TInt 16) (locOf $1) }
+  | 'I32' { TLoc (TInt 32) (locOf $1) }
+  | 'I64' { TLoc (TInt 64) (locOf $1) }
+
+  | 'U8'  { TLoc (TUInt  8) (locOf $1) }
+  | 'U16' { TLoc (TUInt 16) (locOf $1) }
+  | 'U32' { TLoc (TUInt 32) (locOf $1) }
+  | 'U64' { TLoc (TUInt 64) (locOf $1) }
+
+  | 'F16'  { TLoc (TFp  16) (locOf $1) }
+  | 'F32'  { TLoc (TFp  32) (locOf $1) }
+  | 'F64'  { TLoc (TFp  64) (locOf $1) }
+  | 'F128' { TLoc (TFp 128) (locOf $1) }
+
 
 {
 

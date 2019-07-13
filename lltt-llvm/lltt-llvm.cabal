@@ -16,6 +16,7 @@ maintainer:          gabe4k@gmail.com
 extra-source-files:  CHANGELOG.md
 
 library
+  ghc-options:         -Werror -Wall
   exposed-modules:     Language.LLTT.LLVM.Codegen
                        LLVM.IRBuilder.Extra
   -- other-modules:

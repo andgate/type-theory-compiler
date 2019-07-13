@@ -150,13 +150,10 @@ matchElse = \case
 
 matchOp :: MonadMatch m => Op -> m Op
 matchOp = \case
-  OpAddI a b -> OpAddI <$> matchExp a <*> matchExp b
-  OpSubI a b -> OpSubI <$> matchExp a <*> matchExp b
-  OpMulI a b -> OpMulI <$> matchExp a <*> matchExp b
+  OpAdd a b -> OpAdd <$> matchExp a <*> matchExp b
+  OpSub a b -> OpSub <$> matchExp a <*> matchExp b
+  OpMul a b -> OpMul <$> matchExp a <*> matchExp b
 
-  OpAddF a b -> OpAddF <$> matchExp a <*> matchExp b
-  OpSubF a b -> OpSubF <$> matchExp a <*> matchExp b
-  OpMulF a b -> OpMulF <$> matchExp a <*> matchExp b
 
 
 arity :: MonadMatch m => String -> m Int
