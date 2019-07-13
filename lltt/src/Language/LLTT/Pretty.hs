@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE LambdaCase
            , OverloadedStrings
            , ViewPatterns
@@ -5,11 +6,7 @@
 module Language.LLTT.Pretty where
 
 import Language.LLTT.Syntax
-
 import Data.Text.Prettyprint.Doc
-
-import Data.Maybe
-import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
 
 
@@ -36,10 +33,10 @@ instance Pretty Func where
           return $ if isAPat p then p' else parens p'
         body' = pretty (exEAnn body)
         retty = exType body
-        paramtys = [ty | PType _ ty <- ps]
+        paramtys = [pty | PType _ pty <- ps]
         ty = if null paramtys
               then retty
-              else TFunc retty (NE.fromList [ty | PType _ ty <- ps])
+              else TFunc retty (NE.fromList [argty | PType _ argty <- ps])
 
     in case ps' of
       [] -> if isAExp body || isBExp body
@@ -77,13 +74,13 @@ instance Pretty DataType where
     = vsep [ "type" <+> pretty n
            , indent 2 $ vsep $
               [ "=" <+> pretty c ] 
-               ++ ["|" <+> pretty c | c <- cs]
+               ++ ["|" <+> pretty c' | c' <- cs]
            ]
 
 instance Pretty ConstrDefn where
   pretty = \case
-    ConstrDefn l n tys -> pretty n <+> hsep (pretty <$> tys)
-    RecordDefn l n (NE.toList -> ens) -> pretty n <+> encloseSep lbrace rbrace comma (pretty <$> ens)
+    ConstrDefn _ n tys -> pretty n <+> hsep (pretty <$> tys)
+    RecordDefn _ n (NE.toList -> ens) -> pretty n <+> encloseSep lbrace rbrace comma (pretty <$> ens)
 
 instance Pretty Entry where
   pretty (Entry _ n ty) = pretty n <+> ":" <+> pretty ty
@@ -121,15 +118,14 @@ instance Pretty Exp where
     ELoc e _ -> pretty e
     EParens e -> parens $ pretty e
 
-    ELet qs e ->
+    ELet qs body ->
       let (ps, es) = unzip (NE.toList qs)
           ps' = pretty <$> ps
           es' = pretty <$> es
-          qs' = [ q' <+> "=" <+> e'
-                | (q', e') <- zip ps' es' ]
-          e' = pretty e
+          qs' = zipWith (\q' e' -> q' <+> "=" <+> e') ps' es'
+          body' = pretty body
       in vsep [ "let" <+> align (vsep qs')
-              , "in" <+> e'
+              , "in" <+> body'
               ]
 
     EIf p t f -> 
@@ -137,12 +133,6 @@ instance Pretty Exp where
            , indent 2 ("then" <+> pretty t)
            , indent 2 (pretty f)
            ]      
-
-    EMatchI e cls ->
-      let e' = pretty e
-          cls' = pretty <$> cls
-      in vsep $ [ "matchi" <+> e' <+> "of"
-                , indent 2 (vsep $ NE.toList cls') ]
 
     EMatch e cls ->
       let e' = pretty e
@@ -171,6 +161,10 @@ instance Pretty Exp where
     ECon n args ->
       pretty n <+> hsep (wrapBExp <$> args)
 
+
+    ENewTuple x (NE.toList -> xs)
+      -> "new" <+> tupled (pretty <$> (x:xs))
+
     ENewCon n [] ->
       "new" <+> pretty n
 
@@ -189,27 +183,36 @@ instance Pretty Exp where
     ESet lhs rhs -> 
       wrapBExp lhs <+> "<-" <+> wrapBExp rhs
 
-    ENewArray xs -> "new" <+> pretty xs
+
+    ENewArray xs -> "new" <+> list (pretty <$> xs)
     ENewArrayI i -> "new" <+> "Array" <> brackets (pretty i)
     EResizeArray e i -> "resize" <+> wrapBExp e <> brackets (pretty i)
-    EArrayElem e i -> wrapBExp e <> brackets (pretty i)
+
+    ENewVect xs -> "new" <+> encloseSep "<[" "]>" "," (pretty <$> xs)
+    ENewVectI i -> "new" <+> "Vect" <> enclose "<[" "]>" (pretty i)
 
     ENewString str -> "new" <+> dquotes (pretty str)
-    ENewStringI i -> "new" <+> "String" <> brackets (pretty i)
 
     EOp op -> pretty op
 
 
 instance Pretty Lit where
   pretty = \case
+    LNull -> "null"
     LInt i -> pretty i
     LDouble d -> pretty d
     LBool b -> pretty b
     LChar c -> squotes $ pretty c
+    
     LString str -> dquotes $ pretty str
-    LStringI i -> "String" <> brackets (pretty i)
-    LArray xs -> pretty xs
+    
+    LArray xs -> list $ pretty <$> xs
     LArrayI i -> "Array" <> brackets (pretty i)
+    
+    LVect xs -> encloseSep "<[" "]>" "," (pretty <$> xs)
+    LVectI i -> "Vect" <> enclose "<[" "]>" (pretty i)
+    
+    LGetI e i -> pretty e <> brackets (pretty i)
 
 
 instance Pretty Else where
@@ -223,27 +226,27 @@ instance Pretty Else where
 
 instance Pretty Op where
   pretty = \case
-    OpAddI a b ->
+    OpAdd a b ->
       let a' = wrapBExp a
           b' = wrapBExp b
       in hsep ["#add", a', b']
 
-    OpSubI a b ->
+    OpSub a b ->
       let a' = wrapBExp a
           b' = wrapBExp b
       in hsep ["#sub", a', b']
 
-    OpMulI a b ->
+    OpMul a b ->
       let a' = wrapBExp a
           b' = wrapBExp b
       in hsep ["#mul", a', b']
 
-    OpDivI a b ->
+    OpDiv a b ->
       let a' = wrapBExp a
           b' = wrapBExp b
       in hsep ["#div", a', b']
 
-    OpRemI a b ->
+    OpRem a b ->
       let a' = wrapBExp a
           b' = wrapBExp b
       in hsep ["#rem", a', b']
@@ -252,31 +255,6 @@ instance Pretty Op where
       let a' = wrapBExp a
       in hsep ["#neg", a']
     
-    OpAddF a b ->
-      let a' = wrapBExp a
-          b' = wrapBExp b
-      in hsep ["#fadd", a', b']
-
-    OpSubF a b ->
-      let a' = wrapBExp a
-          b' = wrapBExp b
-      in hsep ["#fsub", a', b']
-
-    OpMulF a b ->
-      let a' = wrapBExp a
-          b' = wrapBExp b
-      in hsep ["#fmul", a', b']
-
-    OpDivF a b ->
-      let a' = wrapBExp a
-          b' = wrapBExp b
-      in hsep ["#fdiv", a', b']
-
-    OpRemF a b ->
-      let a' = wrapBExp a
-          b' = wrapBExp b
-      in hsep ["#frem", a', b']
-
     OpAnd a b ->
       let a' = wrapBExp a
           b' = wrapBExp b
@@ -292,13 +270,22 @@ instance Pretty Op where
           b' = wrapBExp b
       in hsep ["#xor", a', b']
 
+    OpShR a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["#shr", a', b']
 
-    OpEqI a b ->
+    OpShL a b ->
+      let a' = wrapBExp a
+          b' = wrapBExp b
+      in hsep ["#shl", a', b']
+
+    OpEq a b ->
       let a' = wrapBExp a
           b' = wrapBExp b
       in hsep ["#eq", a', b']
 
-    OpNeqI a b ->
+    OpNeq a b ->
       let a' = wrapBExp a
           b' = wrapBExp b
       in hsep ["#neq", a', b']
@@ -334,17 +321,17 @@ instance Pretty Type where
   pretty = \case
     TVar n -> pretty n
     TCon n -> pretty n
-    TBool -> "Bool"
-    TI8 -> "I8"
-    TI32 -> "I32"
-    TI64 -> "I64"
-    TF32 -> "F32"
-    TF64 -> "F64"
+    TInt s -> "I" <> pretty s
+    TUInt s -> "U" <> pretty s
+    TFp s -> "F" <> pretty s
     TTuple t (NE.toList -> ts) ->
       tupled $ pretty <$> (t:ts) 
     TArray i ty 
       | isAType ty -> pretty ty <> brackets (pretty i)
       | True       -> parens (pretty ty) <> brackets (pretty i)
+    TVect i ty 
+      | isAType ty -> pretty ty <> brackets (pretty i)
+      | True       -> parens (pretty ty) <> enclose "<[" "]>" (pretty i)
     TPtr ty 
       | isAType ty -> "*" <> pretty ty
       | True       -> "*" <> parens (pretty ty)
@@ -424,7 +411,6 @@ isBExp = \case
 
   ELet _ _ -> False
   EIf _ _ _ -> False
-  EMatchI _ _ -> False
   EMatch _ _ -> False
 
   ERef _ -> False
@@ -433,8 +419,9 @@ isBExp = \case
   ETuple _ _ -> False
   ECon _ [] -> False
   ECon _ _ -> True
+  ENewTuple _ _ -> True 
   ENewCon _ _ -> True
-  EFree e -> True
+  EFree _ -> True
   
   EGet _ _ -> False
   EGetI _ _ -> False
@@ -443,10 +430,11 @@ isBExp = \case
   ENewArray _ -> True
   ENewArrayI _ -> True
   EResizeArray _ _ -> True
-  EArrayElem _ _ -> False
+
+  ENewVect _ -> True
+  ENewVectI _ -> True
 
   ENewString _ -> True
-  ENewStringI _ -> True
 
   EOp _ -> True
 
@@ -464,7 +452,6 @@ isAExp = \case
   
   ELet _ _ -> False
   EIf _ _ _ -> False
-  EMatchI _ _ -> False
   EMatch _ _ -> False
 
   ERef _ -> True
@@ -473,8 +460,9 @@ isAExp = \case
   ETuple _ _ -> True
   ECon _ [] -> True
   ECon _ _ -> False
+  ENewTuple _ _ -> False
   ENewCon _ _ -> False
-  EFree e -> False
+  EFree _ -> False
   
   EGet e _ -> isAExp e
   EGetI e _ -> isAExp e
@@ -483,24 +471,24 @@ isAExp = \case
   ENewArray _ -> False
   ENewArrayI _ -> False
   EResizeArray _ _ -> False
-  EArrayElem e _ -> isAExp e
+
+  ENewVect _ -> False
+  ENewVectI _ -> False
 
   ENewString _ -> False
-  ENewStringI _ -> False
   
   EOp _ -> False
 
 isAType :: Type -> Bool
 isAType = \case
+  TVar _ -> True
   TCon _ -> True
-  TI8 -> True
-  TI32 -> True
-  TI64 -> True
-  TF32 -> True
-  TF64 -> True
-  TBool -> True
+  TInt  _ -> True
+  TUInt _ -> True
+  TFp   _ -> True
   TTuple _ _ -> True
   TArray _ _ -> True
+  TVect _ _ -> True
   TPtr _ -> True
   TFunc _ _ -> False
   TLoc t _ -> isAType t

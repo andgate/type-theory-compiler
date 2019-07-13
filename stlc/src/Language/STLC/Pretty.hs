@@ -254,7 +254,10 @@ instance PrettyFresh Exp where
 
 instance PrettyFresh Lit where
   prettyFresh = \case
+    LNull -> return "null"
+    LBool b -> return $ pretty b
     LInt i -> return $ pretty i
+    LDouble d -> return $ pretty d
     LChar c -> return $ squotes $ pretty c
     LString s -> return $ dquotes $ pretty s
     LStringI i -> do 
@@ -321,27 +324,27 @@ instance PrettyFresh Clause where
 
 instance PrettyFresh Op where
   prettyFresh = \case
-    OpAddI a b -> do
+    OpAdd a b -> do
       a' <- wrapBExpFresh a
       b' <- wrapBExpFresh b
       return $ hsep ["#add", a', b']
 
-    OpSubI a b -> do
+    OpSub a b -> do
       a' <- wrapBExpFresh a
       b' <- wrapBExpFresh b
       return $ hsep ["#sub", a', b']
 
-    OpMulI a b -> do
+    OpMul a b -> do
       a' <- wrapBExpFresh a
       b' <- wrapBExpFresh b
       return $ hsep ["#mul", a', b']
     
-    OpDivI a b -> do
+    OpDiv a b -> do
       a' <- wrapBExpFresh a
       b' <- wrapBExpFresh b
       return $ hsep ["#div", a', b']
     
-    OpRemI a b -> do
+    OpRem a b -> do
       a' <- wrapBExpFresh a
       b' <- wrapBExpFresh b
       return $ hsep ["#rem", a', b']
@@ -349,32 +352,6 @@ instance PrettyFresh Op where
     OpNeg a  -> do
       a' <- wrapBExpFresh a
       return $ hsep ["#neg", a']
-
-
-    OpAddF a b -> do
-      a' <- wrapBExpFresh a
-      b' <- wrapBExpFresh b
-      return $ hsep ["#fadd", a', b']
-
-    OpSubF a b -> do
-      a' <- wrapBExpFresh a
-      b' <- wrapBExpFresh b
-      return $ hsep ["#fsub", a', b']
-
-    OpMulF a b -> do
-      a' <- wrapBExpFresh a
-      b' <- wrapBExpFresh b
-      return $ hsep ["#fmul", a', b']
-    
-    OpDivF a b -> do
-      a' <- wrapBExpFresh a
-      b' <- wrapBExpFresh b
-      return $ hsep ["#fdiv", a', b']
-    
-    OpRemF a b -> do
-      a' <- wrapBExpFresh a
-      b' <- wrapBExpFresh b
-      return $ hsep ["#rem", a', b']
 
 
     OpAnd a b -> do
@@ -393,12 +370,12 @@ instance PrettyFresh Op where
       return $ hsep ["#xor", a', b']
 
 
-    OpEqI a b -> do
+    OpEq a b -> do
       a' <- wrapBExpFresh a
       b' <- wrapBExpFresh b
       return $ hsep ["#eq", a', b']
 
-    OpNeqI a b -> do
+    OpNeq a b -> do
       a' <- wrapBExpFresh a
       b' <- wrapBExpFresh b
       return $ hsep ["#neq", a', b']
@@ -423,6 +400,7 @@ instance PrettyFresh Op where
       a' <- wrapBExpFresh a
       b' <- wrapBExpFresh b
       return $ hsep ["#ge", a', b']
+
 
 -----------------------------------------------------------------------
 -- Helpers

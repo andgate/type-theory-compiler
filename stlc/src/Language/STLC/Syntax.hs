@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE LambdaCase,
              FlexibleInstances, 
              MultiParamTypeClasses, 
@@ -9,7 +10,7 @@
              KindSignatures,
              StandaloneDeriving,
              ViewPatterns
-  #-}
+          #-}
 module Language.STLC.Syntax where
 
 import Language.Syntax.Location
@@ -17,7 +18,6 @@ import Language.Syntax.Location
 import Data.Bifunctor
 import Data.List.NonEmpty (NonEmpty, (<|))
 import qualified Data.List.NonEmpty as NE
-import Data.Foldable
 import Data.Typeable (Typeable)
 import GHC.Generics (Generic)
 import Unbound.Generics.LocallyNameless
@@ -130,8 +130,10 @@ data Exp
   | ENewArrayI Exp
   | EResizeArray Exp Exp
 
+  | ENewVect [Exp]
+  | ENewVectI Exp
+
   | ENewString String
-  | ENewStringI Exp
 
   | EOp Op
   deriving (Show, Generic, Typeable)
@@ -145,14 +147,15 @@ exEAnn = \case
 -- Literals
 data Lit
   = LNull
-  | LInt Int
+  | LBool Bool
+  | LInt Integer
   | LDouble Double
   | LChar Char
-  | LBool Bool
   | LString String
-  | LStringI Exp
   | LArray [Exp]
   | LArrayI Exp
+  | LVect [Exp]
+  | LVectI Exp
   deriving (Show, Generic, Typeable)
 
 -- Else Branches
@@ -163,25 +166,21 @@ data Else
 
 -- Operations
 data Op
-  = OpAddI Exp Exp
-  | OpSubI Exp Exp
-  | OpMulI Exp Exp
-  | OpDivI Exp Exp
-  | OpRemI Exp Exp
+  = OpAdd Exp Exp
+  | OpSub Exp Exp
+  | OpMul Exp Exp
+  | OpDiv Exp Exp
+  | OpRem Exp Exp
   | OpNeg Exp
-  
-  | OpAddF Exp Exp
-  | OpSubF Exp Exp
-  | OpMulF Exp Exp
-  | OpDivF Exp Exp
-  | OpRemF Exp Exp
 
   | OpAnd Exp Exp
   | OpOr  Exp Exp
   | OpXor Exp Exp
+  | OpShR Exp Exp
+  | OpShL Exp Exp
 
-  | OpEqI Exp Exp
-  | OpNeqI Exp Exp
+  | OpEq Exp Exp
+  | OpNeq Exp Exp
   | OpLT Exp Exp
   | OpGT Exp Exp
   | OpGE Exp Exp
@@ -214,24 +213,59 @@ data Type
   = TArr Type Type
   | TCon String
   | TBool
-  | TI8
-  | TI32
-  | TI64
-  | TF32
-  | TF64
+  | TInt Int
+  | TUInt Int
+  | TFp Int
   | TTuple Type (NonEmpty Type)
   | TArray Int Type 
+  | TVect Int Type
   | TPtr Type
   | TLoc Type Loc
   | TParens Type
   deriving (Show, Generic, Typeable)
 
 
+intSizes :: [Int]
+intSizes = [1, 8, 16, 32, 64]
+
+uintSizes :: [Int]
+uintSizes = [8, 16, 32, 64]
+
+floatSizes :: [Int]
+floatSizes = [16, 32, 64, 128]
+
 intTypes :: [Type]
-intTypes = [TI8, TI32, TI64]
+intTypes = TInt <$> intSizes
+
+uintTypes :: [Type]
+uintTypes = TUInt <$> uintSizes
 
 floatTypes :: [Type]
-floatTypes = [TF32, TF64]
+floatTypes = TFp <$> floatSizes
+
+numTypes :: [Type]
+numTypes = intTypes <> uintTypes <> floatTypes
+
+isIntTy :: Type -> Bool
+isIntTy (exTyAnn -> TInt _) = True
+isIntTy _ = False
+
+isUIntTy :: Type -> Bool
+isUIntTy (exTyAnn -> TUInt _) = True
+isUIntTy _ = False
+
+isFloatTy :: Type -> Bool
+isFloatTy (exTyAnn -> TFp _) = True
+isFloatTy _ = False
+
+isPtrTy :: Type -> Bool
+isPtrTy (exTyAnn -> ty) = 
+  case ty of
+    TArr _ _ -> True
+    TArray _ _ -> True
+    TPtr _ -> True
+    _ -> False
+
 
 -- Type Equality
 
@@ -242,12 +276,12 @@ instance Eq Type where
     
     (TCon n1, TCon n2) -> n1 == n2
     
-    (TBool, TBool) -> True
-    (TI8, TI8)   -> True
-    (TI32, TI32) -> True
-    (TI64, TI64) -> True
-    (TF32, TF32) -> True
-    (TF64, TF64) -> True
+    (TInt  s1, TInt  s2) -> s1 == s2
+    (TUInt s1, TUInt s2) -> s1 == s2
+    (TFp   s1, TFp   s2) -> s1 == s2
+
+    (TVect s1 t1, TVect s2 t2)
+      -> s1 == s2 && t1 == t2
 
     (TPtr t1, TPtr t2) -> t1 == t2
 
@@ -297,7 +331,7 @@ exPType _ = error "Expected typed expression!"
 exElseType :: Else -> Type
 exElseType = \case
   Else _ e -> exType e
-  Elif _ p (exType -> t) (exElseType -> f)
+  Elif _ _ (exType -> t) (exElseType -> f)
     | t == f -> t
     | otherwise -> error $ "Expected both branches of else to have same type"
 
@@ -350,7 +384,7 @@ patTypedVars p = patTypedVars' (exPType p) p
 patTypedVars' :: Type -> Pat -> [(String, Type)]
 patTypedVars' ty = \case
   PVar v -> [(name2String v, ty)]
-  PCon n ps -> concatMap patTypedVars ps
+  PCon _ ps -> concatMap patTypedVars ps
   PTuple p (NE.toList -> ps) ->
     concatMap patTypedVars (p:ps)
   PWild -> []
@@ -396,8 +430,8 @@ instance HasLocation Else where
     Elif Nothing _ _ _ -> error $ "expected located elif-branch!"
 
 instance HasLocation Clause where
-  locOf (Clause (Just l) bnd) = l
-  locOf (Clause Nothing bnd)
+  locOf (Clause (Just l) _) = l
+  locOf (Clause Nothing _)
     = error $ "expected located clause!"
 
 instance HasLocation Type where

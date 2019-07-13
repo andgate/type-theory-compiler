@@ -3,4 +3,4 @@ module Language.STLC.Lift where
 import Language.STLC.Syntax
 
 liftModule :: Module -> Module
-liftModule modl = undefined
+liftModule _ = undefined

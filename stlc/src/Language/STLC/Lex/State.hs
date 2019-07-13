@@ -29,7 +29,5 @@ initialLexState fp =
 
 makeLenses ''LexState
 
-instance HasRegion LexState where
-  regOf = _lexRegion
-
-
+instance HasLocation LexState where
+  locOf s = Loc { _locPath = _lexFilePath s, _locReg = _lexRegion s }

@@ -5,7 +5,7 @@ extern printint : I32 -> I32
 
 printiptr : *I32 -> I32
 printiptr i =
-  if #eq i null then 0
+  if #eq i (null as I32) then 0
   else let _ = printint *i
        in printstr "\n"
 
