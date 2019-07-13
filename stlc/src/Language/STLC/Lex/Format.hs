@@ -12,14 +12,10 @@ import Lens.Micro.Platform
 import Control.Monad (when, unless, void)
 import Control.Monad.State.Strict (State, evalState, gets)
 import Language.STLC.Lex.Token
-import Language.Syntax.Location (Loc(..), Region, locReg, regStart, posColumn)
+import Language.Syntax.Location (Loc(..), Region)
 import Safe (headDef)
 
-import qualified Data.Map.Strict as Map
 import qualified Language.Syntax.Location  as L
-
-import Debug.Trace
-import Data.Text.Prettyprint.Doc
 
 
 blkTriggers :: [TokenClass]
@@ -84,13 +80,6 @@ layout toks = mconcat $ reverse $ evalState layoutDriver (mkLayout toks)
 layoutDriver :: Layout [[Token]]
 layoutDriver = do
   ts <- use layToks
-  ts' <- use layToks'
-  stk <- use layStack
-  r <- use layResults
-  -- trace ("layToks:\n" ++ show (vsep (pretty <$> ts)) ++ "\n") $ return ()
-  -- trace ("layToks':\n" ++ show (vsep (pretty <$> ts')) ++ "\n\n") $ return ()
-  -- trace ("layStack:\n" ++ show stk ++ "\n") $ return ()
-  -- trace ("layResults:\n" ++ show (vsep (pretty <$> r)) ++ "\n\n") $ return ()
   case ts of
     (t:ts') -> do
       layToks .= ts'

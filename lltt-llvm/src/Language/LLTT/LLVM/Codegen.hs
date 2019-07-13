@@ -7,10 +7,11 @@
   #-}
 module Language.LLTT.LLVM.Codegen where
 
+import Prelude hiding (log)
+
 import Language.Syntax.Location
 import qualified Language.LLTT.Syntax as LL
-
-import Prelude hiding (log)
+import Language.LLTT.Pretty
 
 import Control.Monad
 import Control.Monad.Fix
@@ -25,6 +26,8 @@ import Data.Text.Prettyprint.Doc as PP
 import Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NE
 
+import Data.List as L
+
 import Data.Bifunctor
 import Data.Char
 import Data.List
@@ -37,6 +40,7 @@ import LLVM.AST.Type as Ty
 import LLVM.AST.Typed as Ty
 import LLVM.AST.Operand as AST
 import LLVM.AST.IntegerPredicate as AST
+import LLVM.AST.FloatingPointPredicate as Fp hiding (True, False)
 import LLVM.AST.CallingConvention as CC
 import qualified LLVM.AST.Float as F
 import qualified LLVM.AST.Constant as C
@@ -267,12 +271,21 @@ genType env = \case
       case envLookupTypeDef n env of
         Nothing -> error $ "undefined type encountered: " ++ n
         Just ty -> ty
-  LL.TBool -> i1
-  LL.TI8 -> i8
-  LL.TI32 -> i32
-  LL.TI64 -> i64
-  LL.TF32 -> float
-  LL.TF64 -> double
+  LL.TInt 1  -> i1
+  LL.TInt 8  -> i8
+  LL.TInt 32 -> i32
+  LL.TInt 64 -> i64
+
+  LL.TUInt 1  -> i1
+  LL.TUInt 8  -> i8
+  LL.TUInt 32 -> i32
+  LL.TUInt 64 -> i64
+
+  LL.TFp 16 -> half
+  LL.TFp 32 -> float
+  LL.TFp 64 -> double
+  LL.TFp 128 -> fp128
+
   LL.TTuple t (NE.toList -> ts) ->
     StructureType True (genType env <$> (t:ts))
   LL.TArray i ty -> ArrayType (fromIntegral i) (genType env ty)
@@ -366,10 +379,7 @@ genExp' env rty = \case
 
   LL.EType e rty' -> genExp' env rty' e
 
-  LL.ECast e ty -> do
-    e' <- genExp env e
-    let ty' = genType env ty
-    bitcast e' ty'
+  LL.ECast e ty -> genCast env e ty
 
   LL.ELoc e l -> genExp' env{envLoc = l} rty e
   LL.EParens e -> genExp' env rty e
@@ -423,15 +433,10 @@ genExp' env rty = \case
     return res
 
 
-  LL.EMatchI i brs -> do
-    error "Codegen: MatchI unimplemented"
-
   LL.EMatch s brs -> mdo
     let ty = genType env rty
     res <- alloca ty Nothing 4
 
-    s' <- genExp env s
-    tag_ptr <- log ("EMatch accessing gep: " ++ show s') 
             $ gep s' [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 0]
     tag <- load tag_ptr 4
 
@@ -476,7 +481,7 @@ genExp' env rty = \case
     br tuple_store_blk
 
     tuple_store_blk <- block `named` "tuple.store"
-    let go (e', i)= do
+    let go (e', i) = do
           e_ptr' <- gep ty_ptr [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 (fromIntegral i)]
           store e_ptr' 4 e'
     mapM_ go (zip es' [0..])
@@ -495,7 +500,6 @@ genExp' env rty = \case
         
         constr_init_blk <- block `named` "constr.init"
         ty_ptr <- alloca ty Nothing 4
-        
         tag_ptr <- gep ty_ptr [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 0]
         store tag_ptr 4 (ConstantOperand $ C.Int 8 (toInteger i))
 
@@ -525,7 +529,6 @@ genExp' env rty = \case
 
             constr_init_blk <- block `named` "newconstr.init"
             ptr_ptr <- bitcast i8_ptr_ptr (Ty.ptr $ Ty.ptr ty)
-            ptr <- load ptr_ptr 4
             tag_ptr <- gep ptr [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 0]
             store tag_ptr 4 (ConstantOperand $ C.Int 8 (toInteger i))
 
@@ -545,12 +548,10 @@ genExp' env rty = \case
       Nothing -> error $ "unrecognized member name: " ++ n
       Just (con_ty, i)  -> do
         e_ptr' <- genExp env e
-        h_ptr <- bitcast e_ptr' (Ty.ptr con_ty)
         log "EGet accessing gep" $ gep h_ptr [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 (toInteger i)]
 
   LL.EGetI e i -> do
     e_ptr' <- loadExp env e
-    i' <- loadExp env i
     gep e_ptr' [i']
 
   LL.ESet lhs rhs -> do
@@ -580,7 +581,6 @@ genExp' env rty = \case
     
     store i8_ptr_ptr 4 r
     arr_ptr <- load arr_ptr_ptr 4
-    mapM_ (\(x, i) -> do 
                   e <- gep arr_ptr [ConstantOperand $ C.Int 32 (toInteger i)]
                   store e 4 x
           ) (zip xs' [0..])
@@ -609,15 +609,12 @@ genExp' env rty = \case
 
     return arr_ptr_ptr
 
-
   LL.EResizeArray e i -> undefined
-  LL.EArrayElem e i -> undefined
 
-  LL.ENewString str -> undefined
-  LL.ENewStringI i -> mdo
+  LL.ENewString str -> mdo
     br newstr_stage_blk
     newstr_stage_blk <- block `named` "newstr.stage"
-    i_ptr' <- genExp env i
+    str_ptr <- globalStringPtr str =<< freshUnName
     br newstr_alloc_blk
 
     newstr_alloc_blk <- block `named` "newstr.alloc"
@@ -626,19 +623,23 @@ genExp' env rty = \case
 
     newstr_call_blk <- block `named` "newstr.call"
     let f = envLookupFunc "malloc" env
-    i' <- load i_ptr' 4
-    r <- call f [(i', [])]
+    r <- call f [(C.int32 (length str), [])]
     store i8_ptr_ptr 4 r
+    br newstr_store_blk
+
+    newstr_store_blk <- block `named` "newstr.store"
+    forM_ (zip str [0..]) $ \(c, i) -> do
+      x <- gep r [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 (toInteger i)]
+      store x 4 =<< C.int8 (fromIntegral $ ord c)
 
     return i8_ptr_ptr
 
 
   LL.EOp op ->
-    genOp env op
+    genOp env rty op
 
 
 genConstrArg :: (MonadCodeGen m) => Env -> Operand -> (Operand, Int) -> IRBuilderT m ()
-genConstrArg env ptr (arg_ptr, i) = do
   eptr <- gep ptr [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 (fromIntegral i)]
   arg <- load arg_ptr 4
   store eptr 4 arg
@@ -648,38 +649,125 @@ genLit :: (MonadCodeGen m) => Env -> LL.Type -> LL.Lit -> IRBuilderT m Operand
 genLit env ty = \case
   LL.LInt i ->
     case (LL.exTyAnn ty) of
-      LL.TI8 -> do
+      LL.TInt 1 -> do
         ptr <- alloca i8 Nothing 4
-        store ptr 4 (ConstantOperand $ C.Int 8 (toInteger i))
+        i' <- C.int8 $ toInteger i
+        store ptr 4 i'
         return ptr
 
-      LL.TI32 -> do
+      LL.TInt 8 -> do
+        ptr <- alloca i8 Nothing 4
+        i' <- C.int8 $ toInteger i
+        store ptr 4 i'
+        return ptr
+
+      LL.TInt 16 -> do
+        ptr <- alloca i8 Nothing 4
+        i' <- C.int8 $ toInteger i
+        store ptr 4 i'
+        return ptr
+
+      LL.TInt 32 -> do
         ptr <- alloca i32 Nothing 4
-        store ptr 4 (ConstantOperand $ C.Int 32 (toInteger i))
+        i' <- C.int32 $ toInteger i
+        store ptr 4 i'
         return ptr
       
-      LL.TI64 -> do
+      LL.TInt 64 -> do
         ptr <- alloca i64 Nothing 4
-        store ptr 4 (ConstantOperand $ C.Int 64 (toInteger i))
+        i' <- C.int64 $ toInteger i
+        store ptr 4 i'
         return ptr
 
-      _ -> error $ "Expected integer type, found: " ++ show ty
+      LL.TUInt 8 -> do
+        ptr <- alloca i8 Nothing 4
+        i' <- C.int8 $ toInteger i
+        store ptr 4 i'
+        return ptr
 
-  LL.LDouble d -> error "double not supported yet"
+      LL.TUInt 16 -> do
+        ptr <- alloca i8 Nothing 4
+        i' <- C.int8 $ toInteger i
+        store ptr 4 i'
+        return ptr
 
-  LL.LBool True -> do
+      LL.TUInt 32 -> do
+        ptr <- alloca i32 Nothing 4
+        i' <- C.int32 $ toInteger i
+        store ptr 4 i'
+        return ptr
+      
+      LL.TUInt 64 -> do
+        ptr <- alloca i64 Nothing 4
+        i' <- C.int64 $ toInteger i
+        store ptr 4 i'
+        return ptr
+
+      LL.TFp 16 -> do
+        ptr <- alloca Ty.float Nothing 4
+        d' <- C.single $ fromIntegral i
+        store ptr 4 d'
+        return ptr
+
+      LL.TFp 32 -> do
+        ptr <- alloca Ty.float Nothing 4
+        d' <- C.single $ fromIntegral i
+        store ptr 4 d'
+        return ptr
+      
+      LL.TFp 64 -> do
+        ptr <- alloca Ty.double Nothing 4
+        d' <- C.double $ fromIntegral i
+        store ptr 4 d'
+        return ptr
+
+      LL.TFp 128 -> do
+        ptr <- alloca Ty.double Nothing 4
+        d' <- C.double $ fromIntegral i
+        store ptr 4 d'
+        return ptr
+
+      _ -> error $ "Expected integer or double type, found: " ++ show ty
+
+  LL.LDouble d ->
+    case LL.exTyAnn ty of
+      LL.TFp 128 -> do
+        ptr <- alloca Ty.float Nothing 4
+        d' <- C.single $ realToFrac d
+        store ptr 4 d'
+        return ptr
+
+      LL.TFp 32 -> do
+        ptr <- alloca Ty.float Nothing 4
+        d' <- C.single $ realToFrac d
+        store ptr 4 d'
+        return ptr
+      
+      LL.TFp 64 -> do
+        ptr <- alloca Ty.double Nothing 4
+        d' <- C.double d
+        store ptr 4 d'
+        return ptr
+
+      LL.TFp 128 -> do
+        ptr <- alloca Ty.float Nothing 4
+        d' <- C.single $ realToFrac d
+        store ptr 4 d'
+        return ptr
+
+      _ -> error $ "Expected double type, found: " ++ show ty
+
+
+  LL.LBool b -> do
     ptr <- alloca i1 Nothing 4
-    store ptr 4 (ConstantOperand $ C.Int 1 1)
-    return ptr
-
-  LL.LBool False -> do
-    ptr <- alloca i1 Nothing 4
-    store ptr 4 (ConstantOperand $ C.Int 1 0)
+    b' <- C.bit $ toInteger $ fromEnum b
+    store ptr 4 b'
     return ptr
 
   LL.LChar c -> do
     ptr <- alloca i8 Nothing 4
-    store ptr 4 (ConstantOperand $ C.Int 8 (toInteger (ord c)))
+    c' <- C.int8 $ toInteger $ ord c
+    store ptr 4 c'
     return ptr
 
   LL.LString str -> do
@@ -689,14 +777,6 @@ genLit env ty = \case
     store str_ptr_ptr 4 str_ptr
     return str_ptr_ptr
   
-  LL.LStringI i -> do
-    let ty = Ty.ArrayType (fromIntegral i) i8
-    strptr <- alloca ty Nothing 4
-    strptr_ptr <- alloca (Ty.ptr i8) Nothing 4
-    strptr' <- bitcast strptr (Ty.ptr i8)
-    store strptr_ptr 4 strptr'
-    return strptr_ptr
-
   LL.LArray xs -> mdo
     br arr_staging_blk
 
@@ -714,7 +794,6 @@ genLit env ty = \case
     br arr_init_blk
 
     arr_init_blk <- block `named` "arr.init"
-    forM_ (zip x_ptrs' [0..]) $ \ (x_ptr', i) -> do
       e_ptr <- gep arrptr' [ConstantOperand $ C.Int 32 (toInteger i)]
       x' <- load x_ptr' 4
       store e_ptr 4 x'
@@ -723,8 +802,11 @@ genLit env ty = \case
     return arrptr_ptr
 
   LL.LGetI e i -> do
-    e_ptr' <- genExp env e
-    log ("LGetI accessing gep") $ gep e_ptr' [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 (toInteger i)]
+    r_ptr <- alloca (genType env ty) Nothing 4
+    e_ptr' <- loadExp env e
+    r <- gep e_ptr' [ConstantOperand $ C.Int 32 0, i']
+    store r_ptr 4 r
+    return r_ptr
 
   l -> error $ "genLit - undefined case encountered: " ++ show l
 
@@ -734,43 +816,259 @@ genElse env = \case
   LL.Elif _ p t@(LL.exType -> ty) f ->
    genExp env (LL.EType (LL.EIf p t f) ty)
 
-genOp :: (MonadCodeGen m) => Env -> LL.Op -> IRBuilderT m Operand
-genOp env = \case
-  LL.OpAddI a b -> genBinaryOp env add LL.TI32 a b
-  LL.OpSubI a b -> genBinaryOp env sub LL.TI32 a b
-  LL.OpMulI a b -> genBinaryOp env mul LL.TI32 a b
-  LL.OpDivI a b -> genBinaryOp env sdiv LL.TI32 a b
-  LL.OpRemI a b -> genBinaryOp env urem LL.TI32 a b
+genOp :: (MonadCodeGen m) => Env -> LL.Type -> LL.Op -> IRBuilderT m Operand
+genOp env rty = \case
+  LL.OpAdd a b
+    | LL.isIntTy rty || LL.isUIntTy rty
+        -> genBinaryOp env add rty a b
+    | LL.isFloatTy rty -> genBinaryOp env fadd rty a b
 
-  LL.OpAddF a b -> genBinaryOp env fadd LL.TF64 a b
-  LL.OpSubF a b -> genBinaryOp env fsub LL.TF64 a b
-  LL.OpMulF a b -> genBinaryOp env fmul LL.TF64 a b
-  LL.OpDivF a b -> genBinaryOp env fdiv LL.TF64 a b
-  LL.OpRemF a b -> genBinaryOp env frem LL.TF64 a b
+  LL.OpSub a b
+    | LL.isIntTy rty || LL.isUIntTy rty
+        -> genBinaryOp env sub rty a b
+    | LL.isFloatTy rty -> genBinaryOp env fsub rty a b
 
-  LL.OpAnd a b -> genBinaryOp env I.and LL.TBool a b
-  LL.OpOr  a b -> genBinaryOp env I.or  LL.TBool a b
-  LL.OpXor a b -> genBinaryOp env I.xor LL.TBool a b
+  LL.OpMul a b
+    | LL.isIntTy rty || LL.isUIntTy rty
+        -> genBinaryOp env mul rty a b
+    | LL.isFloatTy rty -> genBinaryOp env fmul rty a b
 
-  LL.OpEqI a b -> genBinaryOp env (icmp AST.EQ) LL.TBool a b
-  LL.OpNeqI a b -> genBinaryOp env (icmp AST.NE) LL.TBool a b
+  LL.OpDiv a b
+    | LL.isIntTy   rty -> genBinaryOp env sdiv rty a b
+    | LL.isUIntTy  rty -> genBinaryOp env udiv rty a b
+    | LL.isFloatTy rty -> genBinaryOp env fdiv rty a b
 
-  LL.OpLT a b -> genBinaryOp env (icmp AST.SLT) LL.TBool a b
-  LL.OpLE a b -> genBinaryOp env (icmp AST.SLE) LL.TBool a b
-  LL.OpGT a b -> genBinaryOp env (icmp AST.SGT) LL.TBool a b
-  LL.OpGE a b -> genBinaryOp env (icmp AST.SGE) LL.TBool a b
+  LL.OpRem a b
+    | LL.isIntTy  rty -> genBinaryOp env srem rty a b
+    | LL.isUIntTy rty -> genBinaryOp env urem rty a b
+    | LL.isFloatTy  rty -> genBinaryOp env frem rty a b
+
+
+  LL.OpAnd a b -> genBinaryOp env I.and rty a b
+  LL.OpOr  a b -> genBinaryOp env I.or  rty a b
+  LL.OpXor a b -> genBinaryOp env I.xor rty a b
+
+  LL.OpEq a b
+    | LL.isIntTy  rty || LL.isUIntTy rty
+        -> genBinaryOp env (icmp AST.EQ) rty a b
+    | LL.isFloatTy rty -> genBinaryOp env (fcmp Fp.OEQ) rty a b
+
+  LL.OpNeq a b
+    | LL.isIntTy rty || LL.isUIntTy rty
+        -> genBinaryOp env (icmp AST.NE) rty a b
+    | LL.isFloatTy rty -> genBinaryOp env (fcmp Fp.ONE) rty a b
+
+  LL.OpLT a b
+    | LL.isIntTy   rty -> genBinaryOp env (icmp AST.SLT) rty a b
+    | LL.isUIntTy  rty -> genBinaryOp env (icmp AST.ULT) rty a b
+    | LL.isFloatTy rty -> genBinaryOp env (fcmp Fp.OLT) rty a b
+
+  LL.OpLE a b
+    | LL.isIntTy   rty -> genBinaryOp env (icmp AST.SLE) rty a b
+    | LL.isUIntTy  rty -> genBinaryOp env (icmp AST.ULE) rty a b
+    | LL.isFloatTy rty -> genBinaryOp env (fcmp Fp.OLE) rty a b
+
+  LL.OpGT a b
+    | LL.isIntTy   rty -> genBinaryOp env (icmp AST.SGT) rty a b
+    | LL.isUIntTy  rty -> genBinaryOp env (icmp AST.UGT) rty a b
+    | LL.isFloatTy rty -> genBinaryOp env (fcmp Fp.OGT) rty a b
+
+  LL.OpGE a b
+    | LL.isIntTy   rty -> genBinaryOp env (icmp AST.SGE) rty a b
+    | LL.isUIntTy  rty -> genBinaryOp env (icmp AST.UGE) rty a b
+    | LL.isFloatTy rty -> genBinaryOp env (fcmp Fp.OGE) rty a b
 
 
 genBinaryOp :: (MonadFix m, MonadModuleBuilder m)
             => Env -> (Operand -> Operand -> IRBuilderT m Operand) -> LL.Type -> LL.Exp -> LL.Exp -> IRBuilderT m Operand
 genBinaryOp env instr retty a b = do
-    a' <- loadExp env a 
+    a' <- loadExp env a
     b' <- loadExp env b
     
     ptr <- alloca (genType env retty) Nothing 4
     op <- instr a' b'
     store ptr 4 op
     return ptr
+
+
+-----------------------------------------------------------------------
+-- Casting
+-----------------------------------------------------------------------
+
+genCast :: MonadCodeGen m => Env -> LL.Exp -> LL.Type -> IRBuilderT m Operand
+genCast env e t2 = do
+  r_ptr <- alloca (genType env t2) Nothing 4 
+  e_ptr' <- genExp env e
+  let t1 = LL.exType e
+  case (LL.exTyAnn t1, LL.exTyAnn t2) of
+    -- Casting booleans
+
+    -- Casting from Ints
+    (LL.TInt s1, LL.TInt s2)
+      | s1 < s2  -> genSignedUpcast   env e_ptr' r_ptr t2
+      | s1 > s2  -> genSignedDowncast env e_ptr' r_ptr t2
+      | s1 == s2 -> genForcedCast     env e_ptr' r_ptr t2
+
+    (LL.TInt s1, LL.TUInt s2) -- need to remove sign?? unclear how this is done...
+      | s1 < s2  -> undefined
+      | s1 > s2  -> undefined
+      | s1 == s2 -> undefined -- remove sign??
+
+    (LL.TInt s1, LL.TFp s2)
+      -> genSigned2Fp env e_ptr' r_ptr t2
+
+    -- Casting from Unsigned Ints
+    (LL.TUInt s1, LL.TInt s2)
+      | s1 < s2  -> genUnsignedUpcast   env e_ptr' r_ptr t2
+      | s1 > s2  -> genUnsignedDowncast env e_ptr' r_ptr t2
+      | s1 == s2 -> genForcedCast       env e_ptr' r_ptr t2
+
+    (LL.TUInt s1, LL.TUInt s2)
+      | s1 < s2  -> genUnsignedUpcast   env e_ptr' r_ptr t2
+      | s1 > s2  -> genUnsignedDowncast env e_ptr' r_ptr t2
+      | s1 == s2 -> genForcedCast       env e_ptr' r_ptr t2
+
+    (LL.TUInt s1, LL.TFp s2)
+      -> genUnsigned2Fp env e_ptr' r_ptr t2
+
+    -- Casting from Floats
+    (LL.TFp s1, LL.TInt s2)
+      -> genSigned2Fp env e_ptr' r_ptr t2
+
+    (LL.TFp s1, LL.TUInt s2)
+      -> genFp2Signed env e_ptr' r_ptr t2
+
+    (LL.TFp s1, LL.TFp s2)
+      | s1 < s2  -> genFpUpcast   env e_ptr' r_ptr t2
+      | s1 > s2  -> genFpDowncast env e_ptr' r_ptr t2
+      | s1 == s2 -> genForcedCast env e_ptr' r_ptr t2
+
+
+    (t1', t2')
+      | LL.isIntTy   t1' && LL.isPtrTy   t2' -> genInt2Ptr env e_ptr' r_ptr t2
+      | LL.isPtrTy   t1' && LL.isIntTy   t2' -> genPtr2Int env e_ptr' r_ptr t2
+      | LL.isFloatTy t1' && LL.isPtrTy   t2' -> genFp2Ptr  env e_ptr' r_ptr t2
+      | LL.isPtrTy   t1' && LL.isFloatTy t2' -> genPtr2Fp  env e_ptr' r_ptr t2
+      | LL.isPtrTy   t1' && LL.isPtrTy   t2' -> genForcedCast env e_ptr' r_ptr t2
+      | otherwise -> error $ show $ vsep
+                        [ PP.line <> pretty (locOf e <> locOf t2) <+> "error:"
+                        , indent 4 $ vsep
+                            [ "Unsupported cast."
+                            , "From:" <+> pretty t1
+                            , "To:" <+> pretty t2
+                            , "in"
+                            , indent 2 $ pretty e
+                            ]
+                        , PP.line
+                        ]
+  
+  return r_ptr
+
+
+genUnsigned :: MonadCodeGen m => Env -> Operand -> Operand -> LL.Type -> IRBuilderT m ()
+genUnsigned env e_ptr r_ptr ty = do
+  e <- load e_ptr 4
+  r <- bitcast e (genType env ty)
+  store r_ptr 4 r
+
+-- Int to Int casts
+genForcedCast :: MonadCodeGen m => Env -> Operand -> Operand -> LL.Type -> IRBuilderT m ()
+genForcedCast env e_ptr r_ptr ty = do
+  e <- load e_ptr 4
+  r <- bitcast e (genType env ty)
+  store r_ptr 4 r
+
+-- Int to Int casts
+genSignedDowncast :: MonadCodeGen m => Env -> Operand -> Operand -> LL.Type -> IRBuilderT m ()
+genSignedDowncast env e_ptr r_ptr ty = do
+  e <- load e_ptr 4
+  r <- trunc e (genType env ty)
+  store r_ptr 4 r
+
+genSignedUpcast :: MonadCodeGen m => Env -> Operand -> Operand -> LL.Type -> IRBuilderT m ()
+genSignedUpcast env e_ptr r_ptr ty = do
+  e <- load e_ptr 4
+  r <- sext e (genType env ty)
+  store r_ptr 4 r
+
+genUnsignedDowncast :: MonadCodeGen m => Env -> Operand -> Operand -> LL.Type -> IRBuilderT m ()
+genUnsignedDowncast env e_ptr r_ptr ty = do
+  e <- load e_ptr 4
+  r <- trunc e (genType env ty)
+  store r_ptr 4 r
+
+genUnsignedUpcast :: MonadCodeGen m => Env -> Operand -> Operand -> LL.Type -> IRBuilderT m ()
+genUnsignedUpcast env e_ptr r_ptr ty = do
+  e <- load e_ptr 4
+  r <- zext e (genType env ty)
+  store r_ptr 4 r
+
+-- Float to Float casts
+genFpDowncast :: MonadCodeGen m => Env -> Operand -> Operand -> LL.Type -> IRBuilderT m ()
+genFpDowncast env e_ptr r_ptr ty = do
+  e <- load e_ptr 4
+  r <- fptrunc e (genType env ty)
+  store r_ptr 4 r
+
+genFpUpcast :: MonadCodeGen m => Env -> Operand -> Operand -> LL.Type -> IRBuilderT m ()
+genFpUpcast env e_ptr r_ptr ty = do
+  e <- load e_ptr 4
+  r <- fpext e (genType env ty)
+  store r_ptr 4 r
+
+-- Casts between Int and Float
+genSigned2Fp :: MonadCodeGen m => Env -> Operand -> Operand -> LL.Type -> IRBuilderT m ()
+genSigned2Fp env e_ptr r_ptr ty = do
+  e <- load e_ptr 4
+  r <- sitofp e (genType env ty)
+  store r_ptr 4 r
+
+genFp2Signed :: MonadCodeGen m => Env -> Operand -> Operand -> LL.Type -> IRBuilderT m ()
+genFp2Signed env e_ptr r_ptr ty = do
+  e <- load e_ptr 4
+  r <- fptosi e (genType env ty)
+  store r_ptr 4 r
+
+genUnsigned2Fp :: MonadCodeGen m => Env -> Operand -> Operand -> LL.Type -> IRBuilderT m ()
+genUnsigned2Fp env e_ptr r_ptr ty = do
+  e <- load e_ptr 4
+  r <- uitofp e (genType env ty)
+  store r_ptr 4 r
+
+genFp2Unsigned :: MonadCodeGen m => Env -> Operand -> Operand -> LL.Type -> IRBuilderT m ()
+genFp2Unsigned env e_ptr r_ptr ty = do
+  e <- load e_ptr 4
+  r <- fptoui e (genType env ty)
+  store r_ptr 4 r
+
+
+-- Pointer casts
+genInt2Ptr :: MonadCodeGen m => Env -> Operand -> Operand -> LL.Type -> IRBuilderT m ()
+genInt2Ptr env e_ptr r_ptr ty = do
+  e' <- load e_ptr 4
+  r <- inttoptr e' (genType env ty)
+  store r_ptr 4 r
+
+genPtr2Int :: MonadCodeGen m => Env -> Operand -> Operand -> LL.Type -> IRBuilderT m ()
+genPtr2Int env e_ptr r_ptr ty = do
+  e <- load e_ptr 4
+  r <- ptrtoint e (genType env ty)
+  store r_ptr 4 r
+
+genFp2Ptr :: MonadCodeGen m => Env -> Operand -> Operand -> LL.Type -> IRBuilderT m ()
+genFp2Ptr env e_ptr r_ptr ty = do
+  e <- load e_ptr 4
+  r1 <- fptosi e (genType env (LL.TUInt 64))
+  r2 <- inttoptr r1 (genType env ty)
+  store r_ptr 4 r2
+
+genPtr2Fp :: MonadCodeGen m => Env -> Operand -> Operand -> LL.Type -> IRBuilderT m ()
+genPtr2Fp env e_ptr r_ptr ty = do
+  e <- load e_ptr 4
+  r1 <- ptrtoint e (genType env (LL.TUInt 64))
+  r2 <- sitofp r1 (genType env ty)
+  store r_ptr 4 r2
+
 
 
 -----------------------------------------------------------------------
@@ -797,13 +1095,11 @@ genPatInit' env p ty op = case p of
       Nothing -> error $ "undefined constructor: " ++ n
       Just (_, _, con_ty, i, _) -> do
         con_op <- bitcast op (Ty.ptr $ con_ty)
-        let go (p, i) = do
               arg_op <- gep con_op [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 i]
               genPatInit env p arg_op
         mapM_ go (zip ps [1..])
 
   LL.PTuple p (NE.toList -> ps) -> do
-    let go (p, i) = do
           arg_op <- gep op [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 i]
           genPatInit env p arg_op
     mapM_ go (zip (p:ps) [0..])
@@ -832,13 +1128,11 @@ genPatExtract' env p pty op = case p of
       Nothing -> error $ "undefined constructor: " ++ n
       Just (_, _, con_ty, i, _) -> do
         con_op <- bitcast op (Ty.ptr $ con_ty)
-        let go env (p, i) = do
               op' <- gep con_op [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 i]
               genPatExtract env p op'
         foldM go env (zip ps [1..])
 
   LL.PTuple p (NE.toList -> ps) -> do
-    let go env (p, i) = do
           op' <- gep op [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 i]
           genPatExtract env p op'
     foldM go env (zip (p:ps) [0..])
@@ -871,7 +1165,6 @@ genCase env op res exit_blk (LL.Clause n xs body) = do
             go (Just x, ty, i) = do
               case envLookupLocal x env' of
                 Nothing -> error $ "genCase - Expected pattern variable to be in scope: " ++ show x
-                Just a_ptr -> do
                   elem_ptr' <- log "genCase.go accessing gep" $ gep con_op [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 i]
                   elem' <- load elem_ptr' 4
                   store a_ptr 4 elem'

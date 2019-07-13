@@ -18,6 +18,7 @@ extra-source-files:  CHANGELOG.md
                      src/Language/STLC/Parse.y
 
 library
+  ghc-options:         -Werror -Wall
   exposed-modules:     Language.STLC.CConv
                        Language.STLC.Desugar
                        Language.STLC.Lex

@@ -16,6 +16,7 @@ category:            Control
 extra-source-files:  CHANGELOG.md
 
 library
+  ghc-options:         -Werror -Wall
   exposed-modules:     Control.Monad.Report
   -- other-modules:
   -- other-extensions:

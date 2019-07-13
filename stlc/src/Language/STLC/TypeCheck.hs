@@ -51,7 +51,9 @@ data Env = Env { envVars :: Map String Type
 data TcErr
   = UnificationFailure Loc Type Type
   | IntLitMismatch Loc Type Int
+  | FpLitMismatch Loc Type Double
   | UntypedVariable Loc String
+  | IndexMismatch Loc Exp Type
   | RefMismatch Loc Type Exp
   | DerefMismatch Loc Type Exp
   | UnexpectedTuple Loc Type Exp
@@ -71,9 +73,20 @@ instance Pretty TcErr where
     IntLitMismatch l t i ->
       vsep [ line <> pretty l <+> "error:" 
            , indent 4 $ vsep
-                [ "Expected Int literal to have integer type."
+                [ "Integer literal type mismatch!"
+                , "Expected integer literal to have integer or float type."
                 , "Actual:" <+> pretty t 
                 , "in:" <+> pretty i ]
+           , line
+           ]
+
+    FpLitMismatch l t d ->
+      vsep [ line <> pretty l <+> "error:" 
+           , indent 4 $ vsep
+                [ "Floating-point literal type mismatch!"
+                , "Expected float literal to have float type."
+                , "Actual:" <+> pretty t 
+                , "in:" <+> pretty d ]
            , line
            ]
 
@@ -82,6 +95,18 @@ instance Pretty TcErr where
            , indent 4 $ vsep
                 [ "Untyped variable encountered: " <+> pretty (show n)
                 , "All top-level variables and functions must be given type signatures." 
+                ]
+           , line
+           ]
+
+    IndexMismatch l e ty ->
+      vsep [ line <> pretty l <+> "error:" 
+           , indent 4 $ vsep
+                [ "Element index mismatch!"
+                , "Cannot access index of non-pointer type!"
+                , "Actual:" <+> pretty ty
+                , "in"
+                , indent 2 $ pretty e
                 ]
            , line
            ]
@@ -258,10 +283,11 @@ tcExp (EType e ty') Nothing = checkType e ty'
 tcExp (EType e ty') (Just ty) = checkType e =<< unify ty ty'
 
 -- Expression Type Casts
-tcExp (ECast e ty') Nothing = ECast <$> inferType e <*> pure ty'
+tcExp (ECast e ty') Nothing
+  = EType <$> (ECast <$> inferType e <*> pure ty') <*> pure ty'
 tcExp (ECast e ty') (Just ty) = do
   ty'' <- unify ty ty'
-  ECast <$> inferType e <*> pure ty''
+  EType <$> (ECast <$> inferType e <*> pure ty'') <*> pure ty''
 
 tcExp (ELoc e l) mty = withLoc l $ ELoc <$> tcExp e mty <*> pure l
 tcExp (EParens e) mty = EParens <$> tcExp e mty
@@ -408,27 +434,17 @@ tcExp (EGet e n) mty = do
   e' <- checkType e ety
   EType (EGet e' n) <$> maybe (return ty') (`unify` ty') mty
 
-tcExp r@(EGetI e i) mty = do
-  e' <- inferType e
+tcExp (EGetI e i) mty = do
   i' <- checkType i TI32
-  case exTyAnn (exType e') of
-    TArray _ rty ->
-      EType (EGetI e' i') <$> maybe (return rty) (`unify` rty) mty
-    
-    TPtr rty ->
-      EType (EGetI e' i') <$> (maybe (return rty) (`unify` rty) mty)
-
-    aty -> do
+  e' <- tcExp e (TPtr <$> mty)
+  let ty = exType e'
+  case exTyAnn ty of
+    TPtr     ty' -> return $ EType (EGetI e' i') ty'
+    TArray _ ty' -> return $ EType (EGetI e' i') ty'
+    _ -> do
       l <- getLoc
-      error $ show $ vsep [ line <> pretty l <+> "error:"
-                          , indent 4 $ vsep [ "Cannot index into non-array or non-ptr type"
-                                            , "Actual:" <+> pretty aty
-                                            , maybe mempty (\xty -> "Expected:" <+> pretty xty) mty
-                                            , "in"
-                                            , pretty (EGetI e' i) <+> "@" <+> pretty l
-                                            , line
-                                            ]
-                          ]
+      fatal $ IndexMismatch l (EGetI e' i') ty
+
 
 tcExp (ESet lhs rhs) mty = do
   lhs' <- maybe (inferType lhs) (checkType lhs) mty
@@ -530,13 +546,21 @@ tcLit LNull (Just t1) = do
 
 tcLit (LInt i) Nothing = return $ EType (ELit $ LInt i) TI32
 tcLit (LInt i) (Just ty)
-  | (exTyAnn ty) `elem` intTypes = return $ EType (ELit $ LInt i) ty
+  | isIntTy ty   = return $ EType (ELit $ LInt i) ty
+  | isFloatTy ty = return $ EType (ELit $ LDouble (fromIntegral i)) ty
   | otherwise = do
       l <- getLoc
       fatal $ IntLitMismatch l ty i
 
+tcLit (LDouble d) Nothing   = return $ EType (ELit $ LDouble d) TF64
+tcLit (LDouble d) (Just ty)
+  | isFloatTy ty = EType (ELit $ LDouble d) <$> unify ty ty
+  | otherwise = do
+      l <- getLoc
+      fatal $ FpLitMismatch l ty d
+
 tcLit (LChar c) Nothing   = return $ EType (ELit $ LChar c) TI8
-tcLit (LChar c) (Just ty) = EType (ELit $ LChar c) <$> unify ty TI8
+tcLit (LChar c) (Just ty)= EType (ELit $ LChar c) <$> unify ty TI8
 
 -- Strings
 tcLit (LString s) Nothing
@@ -588,6 +612,8 @@ tcLit (LArrayI i) (Just (TArray n ty)) = do
 
 tcLit (LArrayI _) (Just ty)
   = error $ "Expected Array type, found " ++ show (pretty ty)
+
+
 
 
 tcClause :: MonadTc m => Clause -> Maybe Type -> Maybe Type -> m Clause

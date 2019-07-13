@@ -84,18 +84,7 @@ desugarFunc (Func l ty fn_n bnd) = withLoc l $ do
   return $ LL.Func l fn_n ps' body'
 
 desugarExp  :: MonadDesugar m => Exp -> m LL.Exp
-desugarExp (EType e ty) = LL.EType <$> desugarExp' ty e <*> pure (desugarType ty)
-desugarExp (ELoc e l) = withLoc l $ LL.ELoc <$> desugarExp e <*> pure l
-desugarExp e = do
-  l <- askLoc
-  return $ unsafePerformIO $ do
-    putDoc $ vsep [ line <> pretty l <+> "fatal compiler error:"
-                  , indent 4 $ vsep [ "desugarExp - Expected typed expression."
-                                    , "in"
-                                    , indent 2 $ pretty e
-                                    ]
-                  ]
-    exitFailure
+desugarExp e@(exType -> ty) = desugarExp' ty e
 
 
 desugarExp'  :: MonadDesugar m => Type -> Exp -> m LL.Exp

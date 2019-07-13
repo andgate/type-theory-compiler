@@ -10,16 +10,10 @@ module Language.STLC.Lex where
 
 import Prelude hiding (lex)
 import Lens.Micro.Platform
-import Control.Monad
 import Control.Monad.Except
-import Control.Monad.Extra (mconcatMapM)
-import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.State.Strict
-import Control.Monad.Except
 import Data.Bits (shiftR, (.&.))
-import Data.Char (digitToInt, ord)
-import Data.Map.Strict (Map)
-import Data.Monoid
+import Data.Char (ord)
 import Data.Text (Text)
 import Data.Word (Word8)
 import Language.STLC.Lex.Error
@@ -29,10 +23,8 @@ import Language.Syntax.Location
 import Safe (headDef)
 import System.FilePath (FilePath)
 
-import qualified Data.Map            as Map
 import qualified Data.Text           as T
 import qualified Data.Text.Read      as T
-import qualified System.FilePath     as Filesystem
 
 }
 
@@ -108,14 +100,24 @@ hawk :-
   \<                              { rsvp }
   \>                              { rsvp }
 
-  "Bool"                          { rsvp }
+  "I1"                            { rsvp }
   "I8"                            { rsvp }
+  "I16"                           { rsvp }
   "I32"                           { rsvp }
   "I64"                           { rsvp }
+
+  "U8"                            { rsvp }
+  "U16"                           { rsvp }
+  "U32"                           { rsvp }
+  "U64"                           { rsvp }
+
+  "F16"                           { rsvp } 
   "F32"                           { rsvp }
   "F64"                           { rsvp }
+  "F128"                          { rsvp }
+
   "Array"                         { rsvp }
-  "String"                        { rsvp }
+  "Vect"                          { rsvp }
   "null"                          { rsvp }
 
   "module"                        { rsvp }
@@ -252,15 +254,15 @@ rsvp text =
 
 
 skipBreak :: LexAction
-skipBreak text len = do
+skipBreak _ len = do
   moveRegion len
 
 skipContinue :: LexAction
-skipContinue text len = do
+skipContinue _ len = do
   growRegion len
 
 beginString :: LexAction
-beginString text len =
+beginString _ len =
   do
     moveRegion len
     lexStartcode .= stringSC
@@ -287,11 +289,13 @@ appendString text len =
 escapeString :: LexAction
 escapeString text len = do
   let c = T.head $ T.tail text
-      unesc =
-        case c of
-          'n' -> '\n'
-          't' -> '\t'
-          '"' -> '"'
+  unesc <- case c of
+    'n' -> return '\n'
+    't' -> return '\t'
+    '"' -> return '"'
+    _  -> do
+      l <- locOf <$> get
+      throwError $ InvalidEscapeChar l c
   growRegion len
   lexStringBuf %= (unesc:)
 
@@ -309,18 +313,20 @@ handleChar text len = do
       "\\r"   -> yieldCharAt '\r'
       "\'"   -> yieldCharAt '\''
       (c:[])  -> yieldCharAt c
-      _      -> throwError $ InvalidCharLit text
+      _      -> do
+        l <- locOf <$> get
+        throwError $ InvalidCharLit l (trim text)
 
 
 beginComment :: LexAction
-beginComment text len =
+beginComment _ len =
   do
     moveRegion len
     lexStartcode .= commentSC
     lexCommentDepth .= 1
 
 continueComment :: LexAction
-continueComment text len =
+continueComment _ len =
   do
     growRegion len
     lexCommentDepth += 1
@@ -340,13 +346,13 @@ endComment _ len =
         else commentSC
 
 beginLineComment :: LexAction
-beginLineComment text len =
+beginLineComment _ len =
   do
     moveRegion len
     lexStartcode .= lineCommentSC
 
 endLineComment :: LexAction
-endLineComment text len =
+endLineComment _ _ =
   do
     nextLineContinue
     lexStartcode .= 0
@@ -434,14 +440,14 @@ lex fp text = do
             yieldTaggedTok TokenEof ""
             reverse <$> use lexTokAcc
 
-        AlexError (AlexInput p cs text) -> do
-            fp <- use lexFilePath
+        AlexError (AlexInput p _ text') -> do
             r  <- use lexRegion
             let l = Loc fp r
-            throwError $ UnrecognizedToken (headDef (show p) $ words $ show text) l
+            throwError $ UnrecognizedToken l (headDef (show p) $ words $ show text')
 
-        AlexSkip  input' len           -> do
-            throwError IllegalLexerSkip
+        AlexSkip  _ _           -> do
+            l <- locOf <$> get
+            throwError $ IllegalLexerSkip l
 
         AlexToken input' len act       -> do
             act (T.take (fromIntegral len) (currInput input)) (fromIntegral len)
