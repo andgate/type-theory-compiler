@@ -26,8 +26,8 @@ library
                        bifunctors,
                        bytestring,
                        containers,
-                       llvm-hs,
-                       llvm-hs-pure,
+                       llvm-hs ==7.0.1,
+                       llvm-hs-pure ==7.0.0,
                        prettyprinter,
                        text
   hs-source-dirs:      src
