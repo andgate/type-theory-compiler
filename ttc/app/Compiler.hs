@@ -64,7 +64,7 @@ runCompiler Compiler{..} = do
   createDirectoryIfMissing True cBuildDir
   createDirectoryIfMissing True (takeDirectory cOutput)
   llmodules <- mapM (compileSTLC cBuildDir) cInputs
-  callCommand $ "clang-8 -O2 rts.c " <> unwords llmodules <> " -o " <> cOutput
+  callCommand $ "clang -O2 rts.c " <> unwords llmodules <> " -o " <> cOutput
  
 lexSTLC :: FilePath -> String -> [STLC.Token]
 lexSTLC fp c =
@@ -103,8 +103,8 @@ compileSTLC build_dir in_fp = do
         LLVM.writeTargetAssemblyToFile t (LLVM.File $ build_fp <> ".s") m
         LLVM.writeObjectToFile t (LLVM.File $ build_fp <> ".o") m
 
-  callCommand $ "clang-8 -O1 -S -emit-llvm " <> irfp <> " -o " <> irfp <> ".opt1"
-  callCommand $ "clang-8 -O2 -S -emit-llvm " <> irfp <> " -o " <> irfp <> ".opt2"
+  callCommand $ "clang -O1 -S -emit-llvm " <> irfp <> " -o " <> irfp <> ".opt1"
+  callCommand $ "clang -O2 -S -emit-llvm " <> irfp <> " -o " <> irfp <> ".opt2"
 
   return (build_fp <> ".o")
 
