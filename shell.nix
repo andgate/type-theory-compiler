@@ -46,8 +46,8 @@ let
           else import nixos_unstable_pkgs {};
 
   nixPackages = [
-    pkgs.haskellPackages.ghc_8_6_1
-    pkgs.haskellPackages.cabal-install
+    pkgs.ghc
+    pkgs.cabal-install
     pkgs.less
     pkgs.git
     pkgs.gcc
