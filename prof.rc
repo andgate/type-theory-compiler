@@ -1,0 +1,2 @@
+export NIX_CFLAGS_COMPILE="-idirafter /usr/include ${NIX_CFLAGS_COMPILE}"
+export NIX_CFLAGS_LINK="-L/usr/lib ${NIX_CFLAGS_LINK}"
