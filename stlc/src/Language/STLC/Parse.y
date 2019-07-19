@@ -384,12 +384,12 @@ primOp :: { L Op }
   | '#and' aexp aexp { L (OpAnd $2 $3) ($1<++>$3) }
   | '#or'  aexp aexp { L (OpOr $2 $3)  ($1<++>$3) }
   | '#xor' aexp aexp { L (OpXor $2 $3) ($1<++>$3) }
-  | '#shr' aexp aexp { L (OpShr $2 $3) ($1<++>$3) }
+  | '#shr' aexp aexp { L (OpShR $2 $3) ($1<++>$3) }
   | '#shl' aexp aexp { L (OpShL $2 $3) ($1<++>$3) }
 
 
-  | '#eq'  aexp aexp { L (OpEqI $2 $3)  ($1<++>$3) }
-  | '#neq' aexp aexp { L (OpNeqI $2 $3) ($1<++>$3) }
+  | '#eq'  aexp aexp { L (OpEq $2 $3)  ($1<++>$3) }
+  | '#neq' aexp aexp { L (OpNeq $2 $3) ($1<++>$3) }
 
   | '#lt'  aexp aexp { L (OpLT $2 $3) ($1<++>$3) }
   | '#le'  aexp aexp { L (OpLE $2 $3) ($1<++>$3) }

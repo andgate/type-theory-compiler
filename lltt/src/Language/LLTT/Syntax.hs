@@ -160,9 +160,9 @@ data Lit
   | LChar Char
   | LString String
   | LArray [Exp]
-  | LArrayI Int
+  | LArrayI Integer
   | LVect [Exp]
-  | LVectI Int
+  | LVectI Integer
   | LGetI Exp Int
   deriving(Show)
 

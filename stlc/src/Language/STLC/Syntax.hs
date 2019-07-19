@@ -212,7 +212,6 @@ elam ps body = ELam (bind (NE.fromList ps) body)
 data Type
   = TArr Type Type
   | TCon String
-  | TBool
   | TInt Int
   | TUInt Int
   | TFp Int

@@ -10,14 +10,14 @@ import Language.STLC.Syntax
 import Control.Monad.Reader
 
 import Data.Bifunctor
-import Data.List.NonEmpty (NonEmpty, (<|))
+import Data.List.NonEmpty ((<|))
 import qualified Data.List.NonEmpty as NE
 import Data.Either
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
 import Unbound.Generics.LocallyNameless
-import Unbound.Generics.LocallyNameless.Name (name2String, s2n)
+import Unbound.Generics.LocallyNameless.Name (name2String)
 
 type Env = Map String Exp
 
@@ -83,6 +83,15 @@ reduce = \case
   ERef e -> return $ Left $ ERef e
   EDeref e -> return $ Left $ EDeref e
   
+  ETuple e es -> do
+    some_e' <- reduce e
+    some_es' <- mapM reduce es
+    let e' = either id id some_e'
+        es' = either id id <$> some_es'
+    if length (rights (some_e' : NE.toList some_es')) == 0
+      then return $ Left $ ETuple e' es'
+      else return $ Right $ ETuple e' es'
+
   ECon n es -> do
     some_es' <- mapM reduce es
     let es' = either id id <$> some_es'
@@ -101,23 +110,22 @@ reduce = \case
   ENewArrayI e -> return $ Left $ ENewArrayI e
   EResizeArray e s -> return $ Left $ EResizeArray e s
 
-  ENewString s -> return $ Left $ ENewString s
-  ENewStringI e -> return $ Left $ ENewStringI e
+  ENewVect  e -> return $ Left $ ENewVect  e
+  ENewVectI e -> return $ Left $ ENewVectI e
 
-  EOp op -> do
-    may_op' <- reduceOp op
-    case may_op' of
-      Left -> return EOp
+  ENewString s -> return $ Left $ ENewString s
+
+  EOp op -> reduceOp op
 
 
 reduceLit :: MonadReduce m => Lit -> m (Either Lit Lit)
 reduceLit = \case
+  LNull -> return $ Left $ LNull
+  LBool b -> return $ Left $ LBool b
   LInt i -> return $ Left $ LInt i
-  LChar c -> return $ Left $ LChar c
-
+  LDouble d -> return $ Left $ LDouble d
+  LChar c -> return $ Left $ LChar c  
   LString str -> return $ Left $ LString str
-
-  LStringI e -> bimap LStringI LStringI <$> reduce e
 
   LArray xs -> do
     xs' <- mapM reduce xs
@@ -128,6 +136,15 @@ reduceLit = \case
   LArrayI e -> do
     bimap LArrayI LArrayI <$> reduce e
 
+  LVect xs -> do
+    xs' <- mapM reduce xs
+    if length (rights xs') == 0
+      then return $ Left $ LVect (lefts xs')
+      else return $ Right $ LVect (either id id <$> xs')
+
+  LVectI e -> do
+    bimap LVectI LVectI <$> reduce e
+
 
 extractPat :: (Pat, Exp) -> [(Var, Exp)]
 extractPat (pat, e)
@@ -135,7 +152,7 @@ extractPat (pat, e)
       PVar v -> [(v, e)]
       PCon n ps ->
         case exEAnn e of
-          ECon con_n es 
+          ECon _ es 
             | length ps == length es -> concatMap extractPat (zip ps es)
             | otherwise -> error $ "extractPat - Pattern-Constructor length mismatch!"
           
@@ -145,7 +162,7 @@ extractPat (pat, e)
 
       PTuple p ps ->
         case exEAnn e of
-          ETuple con_n es 
+          ETuple _ es 
               | NE.length ps == length es -> concatMap extractPat $ NE.toList $ NE.zip (p<|ps) es
               | otherwise -> error $ "extractPat - Pattern-Constructor length mismatch!"
           
@@ -161,20 +178,20 @@ extractPat (pat, e)
 
 reduceOp :: MonadReduce m => Op -> m (Either Exp Exp)
 reduceOp = \case
-  OpAdd a b -> reduceBinaryOpI OpAdd (+) (+) a b
-  OpSub a b -> reduceBinaryOpI OpAdd (-) (-) a b
-  OpMul a b -> reduceBinaryOpI OpAdd (*) (*) a b
-  OpDiv a b -> reduceBinaryOpI OpAdd (/) (/) a b
+  OpAdd a b -> reduceBinaryOp OpAdd (+) (+) a b
+  OpSub a b -> reduceBinaryOp OpAdd (-) (-) a b
+  OpMul a b -> reduceBinaryOp OpAdd (*) (*) a b
+  OpDiv a b -> reduceBinaryOp OpAdd (div) (/) a b
 
   _ -> error $ "Unsupported operator encountered!"
 
 
-reduceBinaryOpI :: MonadReduce m
+reduceBinaryOp :: MonadReduce m
                => (Exp -> Exp -> Op)
-               -> (Int -> Int -> Int)
+               -> (Integer -> Integer -> Integer)
                -> (Double -> Double -> Double)
                -> Exp -> Exp -> m (Either Exp Exp)
-reduceBinaryOpI constr instr instrf a b = do
+reduceBinaryOp constr instr instrf a b = do
   some_a' <- reduce a
   case some_a' of
     Right a' -> return $ Right $ EOp $ constr a' b
