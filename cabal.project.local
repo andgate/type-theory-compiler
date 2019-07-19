@@ -1,2 +1,4 @@
 profiling: True
 tests: True
+keep-going: True
+jobs: 16

@@ -11,7 +11,7 @@ module Control.Monad.Report where
 
 import Control.Monad
 import Control.Monad.Reader
-import Control.Monad.Trans
+-- import Control.Monad.Trans
 import Data.Bifunctor
 import Data.DList (DList)
 import qualified Data.DList as DL
@@ -165,7 +165,7 @@ instance Monad m => MonadReport e (ReportT e m) where
           ja <- unReportT m $ Success ()
           return $ case ja of
             Failure es'   -> let es'' = es' <> es in es'' `seq` Failure es''
-            Failing es' a -> let es'' = es' <> es in es'' `seq` Failure es''
+            Failing es' _ -> let es'' = es' <> es in es'' `seq` Failure es''
             Success     a -> Failing es a
       Success _   -> do
           ja <- unReportT m $ Success ()

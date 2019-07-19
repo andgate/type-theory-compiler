@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-name-shadowing -fno-warn-unused-matches -fno-warn-unused-imports #-}
 {-# LANGUAGE OverloadedStrings,
              LambdaCase,
              RecursiveDo,
@@ -49,10 +50,9 @@ import qualified LLVM.IRBuilder.Constant as C
 import LLVM.IRBuilder.Module
 import LLVM.IRBuilder.Monad
 import LLVM.IRBuilder.Instruction as I
-import LLVM.IRBuilder.Extra
 
-import System.IO.Unsafe
-import Debug.Trace
+-- import System.IO.Unsafe
+-- import Debug.Trace
 
 log :: String -> a -> a
 log msg a = a -- unsafePerformIO (putStrLn msg) `seq` a
@@ -388,7 +388,7 @@ genExp' env rty = \case
     br let_header
     let_header <- block `named` "let.header"
     
-    let (ps, es) = unzip $ NE.toList qs
+    let ps = fst <$> NE.toList qs
     env' <- foldM genPatAlloc env ps
 
     let go (p, e) = mdo
@@ -437,7 +437,9 @@ genExp' env rty = \case
     let ty = genType env rty
     res <- alloca ty Nothing 4
 
-            $ gep s' [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 0]
+    s' <- genExp env s
+    tag_ptr <- log ("EMatch accessing gep: " ++ show s') 
+             $ gep s' [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 0]
     tag <- load tag_ptr 4
 
     switch tag err_blk cases
@@ -482,7 +484,7 @@ genExp' env rty = \case
 
     tuple_store_blk <- block `named` "tuple.store"
     let go (e', i) = do
-          e_ptr' <- gep ty_ptr [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 (fromIntegral i)]
+          e_ptr' <- gep ty_ptr [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 i]
           store e_ptr' 4 e'
     mapM_ go (zip es' [0..])
 
@@ -528,14 +530,15 @@ genExp' env rty = \case
             br constr_init_blk
 
             constr_init_blk <- block `named` "newconstr.init"
-            ptr_ptr <- bitcast i8_ptr_ptr (Ty.ptr $ Ty.ptr ty)
-            tag_ptr <- gep ptr [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 0]
+            c_ptr_ptr <- bitcast i8_ptr_ptr (Ty.ptr $ Ty.ptr ty)
+            c_ptr <- load c_ptr_ptr 4
+            tag_ptr <- gep c_ptr [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 0]
             store tag_ptr 4 (ConstantOperand $ C.Int 8 (toInteger i))
 
-            con_ptr <- bitcast ptr (Ty.ptr con_ty)
+            con_ptr <- bitcast c_ptr (Ty.ptr con_ty)
             mapM_ (genConstrArg env con_ptr) (zip args' [1..])
 
-            return ptr_ptr
+            return c_ptr_ptr
 
   LL.EFree e -> do
     let f = envLookupFunc "free" env
@@ -548,10 +551,11 @@ genExp' env rty = \case
       Nothing -> error $ "unrecognized member name: " ++ n
       Just (con_ty, i)  -> do
         e_ptr' <- genExp env e
-        log "EGet accessing gep" $ gep h_ptr [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 (toInteger i)]
+        log "EGet accessing gep" $ gep e_ptr' [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 (toInteger i)]
 
   LL.EGetI e i -> do
     e_ptr' <- loadExp env e
+    i' <- loadExp env i
     gep e_ptr' [i']
 
   LL.ESet lhs rhs -> do
@@ -581,9 +585,9 @@ genExp' env rty = \case
     
     store i8_ptr_ptr 4 r
     arr_ptr <- load arr_ptr_ptr 4
-                  e <- gep arr_ptr [ConstantOperand $ C.Int 32 (toInteger i)]
-                  store e 4 x
-          ) (zip xs' [0..])
+    forM_ (zip xs' [0..]) $ \(x, i) -> do
+      e_ptr <- gep arr_ptr [ConstantOperand $ C.Int 32 i]
+      store e_ptr 4 x
 
     return arr_ptr_ptr
 
@@ -612,24 +616,25 @@ genExp' env rty = \case
   LL.EResizeArray e i -> undefined
 
   LL.ENewString str -> mdo
-    br newstr_stage_blk
-    newstr_stage_blk <- block `named` "newstr.stage"
-    str_ptr <- globalStringPtr str =<< freshUnName
-    br newstr_alloc_blk
+    -- br newstr_stage_blk
+    -- newstr_stage_blk <- block `named` "newstr.stage"
+    -- str_ptr <- globalStringPtr str =<< freshUnName
+    br newstr_alloc_handle_blk
 
-    newstr_alloc_blk <- block `named` "newstr.alloc"
+    newstr_alloc_handle_blk <- block `named` "newstr.alloc.handle"
     i8_ptr_ptr <- alloca (Ty.ptr Ty.i8) Nothing 4
-    br newstr_call_blk
+    br newstr_alloc_content_blk
 
-    newstr_call_blk <- block `named` "newstr.call"
+    newstr_alloc_content_blk <- block `named` "newstr.alloc.content"
     let f = envLookupFunc "malloc" env
-    r <- call f [(C.int32 (length str), [])]
+    n <- C.int32 $ toInteger $ length $ str
+    r <- call f [(n, [])]
     store i8_ptr_ptr 4 r
     br newstr_store_blk
 
     newstr_store_blk <- block `named` "newstr.store"
     forM_ (zip str [0..]) $ \(c, i) -> do
-      x <- gep r [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 (toInteger i)]
+      x <- gep r [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 i]
       store x 4 =<< C.int8 (fromIntegral $ ord c)
 
     return i8_ptr_ptr
@@ -640,6 +645,7 @@ genExp' env rty = \case
 
 
 genConstrArg :: (MonadCodeGen m) => Env -> Operand -> (Operand, Int) -> IRBuilderT m ()
+genConstrArg env ptr (arg_ptr, i) = do
   eptr <- gep ptr [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 (fromIntegral i)]
   arg <- load arg_ptr 4
   store eptr 4 arg
@@ -731,11 +737,11 @@ genLit env ty = \case
 
   LL.LDouble d ->
     case LL.exTyAnn ty of
-      LL.TFp 128 -> do
-        ptr <- alloca Ty.float Nothing 4
-        d' <- C.single $ realToFrac d
-        store ptr 4 d'
-        return ptr
+      -- LL.TFp 16 -> do
+      --   ptr <- alloca Ty.half Nothing 4
+      --   d' <- C.half $  d
+      --   store ptr 4 d'
+      --   return ptr
 
       LL.TFp 32 -> do
         ptr <- alloca Ty.float Nothing 4
@@ -749,11 +755,11 @@ genLit env ty = \case
         store ptr 4 d'
         return ptr
 
-      LL.TFp 128 -> do
-        ptr <- alloca Ty.float Nothing 4
-        d' <- C.single $ realToFrac d
-        store ptr 4 d'
-        return ptr
+      -- LL.TFp 128 -> do
+      --   ptr <- alloca Ty.fp128 Nothing 4
+      --   d' <- C.single $ realToFrac d
+      --   store ptr 4 (ConstantOperand $ C.Float (F.Quadruple $ d d))
+      --   return ptr
 
       _ -> error $ "Expected double type, found: " ++ show ty
 
@@ -794,7 +800,8 @@ genLit env ty = \case
     br arr_init_blk
 
     arr_init_blk <- block `named` "arr.init"
-      e_ptr <- gep arrptr' [ConstantOperand $ C.Int 32 (toInteger i)]
+    forM_ (zip x_ptrs' [0..]) $ \(x_ptr', i) -> do
+      e_ptr <- gep arrptr' [ConstantOperand $ C.Int 32 i]
       x' <- load x_ptr' 4
       store e_ptr 4 x'
 
@@ -804,7 +811,7 @@ genLit env ty = \case
   LL.LGetI e i -> do
     r_ptr <- alloca (genType env ty) Nothing 4
     e_ptr' <- loadExp env e
-    r <- gep e_ptr' [ConstantOperand $ C.Int 32 0, i']
+    r <- gep e_ptr' [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 (toInteger i)]
     store r_ptr 4 r
     return r_ptr
 
@@ -822,61 +829,76 @@ genOp env rty = \case
     | LL.isIntTy rty || LL.isUIntTy rty
         -> genBinaryOp env add rty a b
     | LL.isFloatTy rty -> genBinaryOp env fadd rty a b
+    | otherwise -> error "Couldn't generate operation"
 
   LL.OpSub a b
     | LL.isIntTy rty || LL.isUIntTy rty
         -> genBinaryOp env sub rty a b
     | LL.isFloatTy rty -> genBinaryOp env fsub rty a b
+    | otherwise -> error "Couldn't generate operation"
 
   LL.OpMul a b
     | LL.isIntTy rty || LL.isUIntTy rty
         -> genBinaryOp env mul rty a b
     | LL.isFloatTy rty -> genBinaryOp env fmul rty a b
+    | otherwise -> error "Couldn't generate operation"
 
   LL.OpDiv a b
     | LL.isIntTy   rty -> genBinaryOp env sdiv rty a b
     | LL.isUIntTy  rty -> genBinaryOp env udiv rty a b
     | LL.isFloatTy rty -> genBinaryOp env fdiv rty a b
+    | otherwise -> error "Couldn't generate operation"
 
   LL.OpRem a b
     | LL.isIntTy  rty -> genBinaryOp env srem rty a b
     | LL.isUIntTy rty -> genBinaryOp env urem rty a b
     | LL.isFloatTy  rty -> genBinaryOp env frem rty a b
+    | otherwise -> error "Couldn't generate operation"
 
+  LL.OpNeg a -> error "#neg not supported"
 
   LL.OpAnd a b -> genBinaryOp env I.and rty a b
   LL.OpOr  a b -> genBinaryOp env I.or  rty a b
   LL.OpXor a b -> genBinaryOp env I.xor rty a b
 
+  LL.OpShR a b -> genBinaryOp env I.lshr rty a b
+  LL.OpShL a b -> genBinaryOp env I.shl rty a b
+
   LL.OpEq a b
     | LL.isIntTy  rty || LL.isUIntTy rty
         -> genBinaryOp env (icmp AST.EQ) rty a b
     | LL.isFloatTy rty -> genBinaryOp env (fcmp Fp.OEQ) rty a b
+    | otherwise -> error "Couldn't generate operation"
 
   LL.OpNeq a b
     | LL.isIntTy rty || LL.isUIntTy rty
         -> genBinaryOp env (icmp AST.NE) rty a b
     | LL.isFloatTy rty -> genBinaryOp env (fcmp Fp.ONE) rty a b
+    | otherwise -> error "Couldn't generate operation"
 
   LL.OpLT a b
     | LL.isIntTy   rty -> genBinaryOp env (icmp AST.SLT) rty a b
     | LL.isUIntTy  rty -> genBinaryOp env (icmp AST.ULT) rty a b
     | LL.isFloatTy rty -> genBinaryOp env (fcmp Fp.OLT) rty a b
+    | otherwise -> error "Couldn't generate operation"
 
   LL.OpLE a b
     | LL.isIntTy   rty -> genBinaryOp env (icmp AST.SLE) rty a b
     | LL.isUIntTy  rty -> genBinaryOp env (icmp AST.ULE) rty a b
     | LL.isFloatTy rty -> genBinaryOp env (fcmp Fp.OLE) rty a b
+    | otherwise -> error "Couldn't generate operation"
 
   LL.OpGT a b
     | LL.isIntTy   rty -> genBinaryOp env (icmp AST.SGT) rty a b
     | LL.isUIntTy  rty -> genBinaryOp env (icmp AST.UGT) rty a b
     | LL.isFloatTy rty -> genBinaryOp env (fcmp Fp.OGT) rty a b
+    | otherwise -> error "Couldn't generate operation"
 
   LL.OpGE a b
     | LL.isIntTy   rty -> genBinaryOp env (icmp AST.SGE) rty a b
     | LL.isUIntTy  rty -> genBinaryOp env (icmp AST.UGE) rty a b
     | LL.isFloatTy rty -> genBinaryOp env (fcmp Fp.OGE) rty a b
+    | otherwise -> error "Couldn't generate operation"
 
 
 genBinaryOp :: (MonadFix m, MonadModuleBuilder m)
@@ -1095,11 +1117,13 @@ genPatInit' env p ty op = case p of
       Nothing -> error $ "undefined constructor: " ++ n
       Just (_, _, con_ty, i, _) -> do
         con_op <- bitcast op (Ty.ptr $ con_ty)
+        let go (p, i) = do
               arg_op <- gep con_op [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 i]
               genPatInit env p arg_op
         mapM_ go (zip ps [1..])
 
   LL.PTuple p (NE.toList -> ps) -> do
+    let go (p, i) = do
           arg_op <- gep op [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 i]
           genPatInit env p arg_op
     mapM_ go (zip (p:ps) [0..])
@@ -1128,11 +1152,13 @@ genPatExtract' env p pty op = case p of
       Nothing -> error $ "undefined constructor: " ++ n
       Just (_, _, con_ty, i, _) -> do
         con_op <- bitcast op (Ty.ptr $ con_ty)
+        let go env (p, i) = do
               op' <- gep con_op [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 i]
               genPatExtract env p op'
         foldM go env (zip ps [1..])
 
   LL.PTuple p (NE.toList -> ps) -> do
+    let go env (p, i) = do
           op' <- gep op [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 i]
           genPatExtract env p op'
     foldM go env (zip (p:ps) [0..])
@@ -1165,6 +1191,7 @@ genCase env op res exit_blk (LL.Clause n xs body) = do
             go (Just x, ty, i) = do
               case envLookupLocal x env' of
                 Nothing -> error $ "genCase - Expected pattern variable to be in scope: " ++ show x
+                Just a_ptr -> do
                   elem_ptr' <- log "genCase.go accessing gep" $ gep con_op [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 i]
                   elem' <- load elem_ptr' 4
                   store a_ptr 4 elem'

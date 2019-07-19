@@ -11,8 +11,6 @@
 module Language.Syntax.Location where
 
 import Lens.Micro.Platform
-import Data.Foldable
-import Data.Monoid
 
 import Data.Data
 import GHC.Generics (Generic)

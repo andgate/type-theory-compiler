@@ -1,7 +1,7 @@
 module Language.Module where
 
 import Data.IntMap.Strict (IntMap)
-import qualified Data.IntMap.Strict as IntMap
+-- import qualified Data.IntMap.Strict as IntMap
 
 import Data.Map.Strict (Map)
 
