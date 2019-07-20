@@ -28,7 +28,7 @@ sumintsH xs n acc =
   in sumintsH xs n1 acc1
 
 mkArray : I32 -> *I32
-mkArray n = mkArrayH n (new [] 32)
+mkArray n = mkArrayH n (new Array[32])
 
 mkArrayH : I32 -> *I32 -> *I32
 mkArrayH i xs =

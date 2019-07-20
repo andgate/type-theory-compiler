@@ -151,6 +151,14 @@ exType = \case
   EParens e -> exType e
   e -> error $ "Expected typed expression, found: " ++ show e 
 
+exTyArrElem :: Type -> Type
+exTyArrElem (exTyAnn -> TArray _ ty) = ty
+exTyArrElem _ = error "expected array type"
+
+exTyPtrElem :: Type -> Type
+exTyPtrElem (exTyAnn -> TPtr ty) = ty
+exTyPtrElem _ = error "expected pointer type"
+
 -- Literals
 data Lit
   = LNull

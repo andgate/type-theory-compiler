@@ -607,6 +607,10 @@ tcLit (LArrayI i) (Just (TArray n ty)) = do
   i' <- checkType i (TInt 32)
   return $ EType (ELit $ LArrayI i) (TArray n ty)
 
+tcLit (LArrayI i) (Just (exTyAnn -> TPtr ty)) = do
+  i' <- checkType i (TInt 32)
+  return $ EType (ELit $ LArrayI i) (TPtr ty)
+
 tcLit (LArrayI _) (Just ty)
   = error $ "Expected Array type, found " ++ show (pretty ty)
 

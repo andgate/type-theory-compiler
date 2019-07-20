@@ -688,6 +688,7 @@ genConstrArg env ptr (arg_ptr, i) = do
 
 genLit :: (MonadCodeGen m) => Env -> LL.Type -> LL.Lit -> IRBuilderT m Operand
 genLit env ty = \case
+  LL.LNull -> return $ ConstantOperand $ C.Null (genType env ty)
   LL.LInt i ->
     case (LL.exTyAnn ty) of
       LL.TInt 1 -> do
@@ -843,6 +844,56 @@ genLit env ty = \case
     store arrptr_ptr 4 arrptr'
     return arrptr_ptr
 
+  LL.LArrayI i -> mdo
+    br arr_alloc_blk
+
+    arr_alloc_blk <- block `named` "arr.alloc"
+    let ty' = genType env ty
+        ety = genType env (LL.exTyPtrElem ty)
+        arrty = Ty.ArrayType (fromIntegral i) ety
+    arrptr <- alloca arrty Nothing 4
+    arrptr' <- bitcast arrptr ty'
+    arrptr_ptr <- alloca ty' Nothing 4
+    store arrptr_ptr 4 arrptr'
+    return arrptr_ptr
+    
+  LL.LVect xs -> mdo
+    br vec_staging_blk
+
+    vec_staging_blk <- block `named` "vec.staging"
+    x_ptrs' <- mapM (genExp env) xs
+    br vec_alloc_blk
+
+    vec_alloc_blk <- block `named` "vec.alloc"
+    let ety = genType env $ LL.exType $ head xs
+        n = fromIntegral $ length xs
+        vecty = Ty.VectorType n ety
+    vecptr <- alloca vecty Nothing 4
+    vecptr' <- bitcast vecptr (Ty.ptr ety)
+    vecptr_ptr <- alloca (Ty.ptr ety) Nothing 4
+    br vec_init_blk
+
+    vec_init_blk <- block `named` "vec.init"
+    forM_ (zip x_ptrs' [0..]) $ \(x_ptr', i) -> do
+      e_ptr <- gep vecptr' [ConstantOperand $ C.Int 32 i]
+      x' <- load x_ptr' 4
+      store e_ptr 4 x'
+
+    store vecptr_ptr 4 vecptr'
+    return vecptr_ptr
+
+  LL.LVectI i -> mdo
+    br vec_alloc_blk
+
+    vec_alloc_blk <- block `named` "vec.alloc"
+    let ty' = genType env ty
+        vecty = Ty.VectorType (fromIntegral i) ty'
+    vecptr <- alloca vecty Nothing 4
+    vecptr' <- bitcast vecptr ty'
+    vecptr_ptr <- alloca (Ty.ptr ty') Nothing 4
+    store vecptr_ptr 4 vecptr'
+    return vecptr_ptr
+
   LL.LGetI e i -> do
     r_ptr <- alloca (genType env ty) Nothing 4
     e_ptr' <- loadExp env e
@@ -850,7 +901,7 @@ genLit env ty = \case
     store r_ptr 4 r
     return r_ptr
 
-  l -> error $ "genLit - undefined case encountered: " ++ show l
+--  l -> error $ "genLit - undefined case encountered: " ++ show l
 
 genElse :: (MonadCodeGen m) => Env -> LL.Else -> IRBuilderT m Operand
 genElse env = \case
