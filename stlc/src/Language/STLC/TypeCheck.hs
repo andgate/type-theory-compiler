@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-unused-matches -fno-warn-unused-local-binds -fno-warn-name-shadowing #-}
 {-# LANGUAGE LambdaCase
            , ConstraintKinds
            , FlexibleContexts
@@ -12,7 +13,8 @@
 module Language.STLC.TypeCheck where
 
 import Language.STLC.Syntax
-import Language.STLC.Pretty
+import Language.STLC.Pretty ()
+import Language.Syntax.Location
 
 import Control.Monad.Report
 
@@ -21,21 +23,17 @@ import Control.Monad.Report
 -- While this language is intended to be the target of a
 -- higher level language, type inference is necessary
 -- for generating tests.
-import Language.Syntax.Location
-import Language.STLC.Syntax
 
 import Control.Monad.Reader
 
 import Data.Bifunctor
 import Data.List
-import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty ()
 import qualified Data.List.NonEmpty as NE
 
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
-import Data.Typeable (Typeable)
-import GHC.Generics (Generic)
 import Unbound.Generics.LocallyNameless
 
 import Data.Text.Prettyprint.Doc
@@ -50,7 +48,7 @@ data Env = Env { envVars :: Map String Type
 
 data TcErr
   = UnificationFailure Loc Type Type
-  | IntLitMismatch Loc Type Int
+  | IntLitMismatch Loc Type Integer
   | FpLitMismatch Loc Type Double
   | UntypedVariable Loc String
   | IndexMismatch Loc Exp Type
@@ -336,7 +334,7 @@ tcExp (ELet bnd) mty = do
                    (exType body')
 
 tcExp (EIf p t f) Nothing = do
-  p' <- checkType p TBool
+  p' <- checkType p (TInt 1)
   t' <- inferType t
   f' <- tcElse f Nothing
   ty <- unify (exType t') (exElseType f')
@@ -344,7 +342,7 @@ tcExp (EIf p t f) Nothing = do
 
 
 tcExp (EIf p t f) (Just ty) = do
-  p' <- checkType p TBool
+  p' <- checkType p (TInt 1)
   t' <- checkType t ty
   f' <- tcElse f (Just ty)
   return $ EType (EIf p' t' f') ty
@@ -426,7 +424,7 @@ tcExp (ENewCon n args) mty = do
 
 -- Free Expression
 tcExp (EFree e) mty =
-  EType <$> (EFree <$> tcExp e mty) <*> pure TI8
+  EType <$> (EFree <$> tcExp e mty) <*> pure (TInt 8)
 
 tcExp (EGet e n) mty = do
   mget_ty <- lookupType n
@@ -435,7 +433,7 @@ tcExp (EGet e n) mty = do
   EType (EGet e' n) <$> maybe (return ty') (`unify` ty') mty
 
 tcExp (EGetI e i) mty = do
-  i' <- checkType i TI32
+  i' <- checkType i (TInt 32)
   e' <- tcExp e (TPtr <$> mty)
   let ty = exType e'
   case exTyAnn ty of
@@ -484,7 +482,7 @@ tcExp (ENewArrayI i) Nothing =
 -- We'll solve this problem some other day.
 
 tcExp (ENewArrayI i) (Just ty@(exTyAnn -> TPtr _)) = do
-  i' <- checkType i TI32
+  i' <- checkType i (TInt 32)
   return $ EType (ENewArrayI i') ty
 
 tcExp (ENewArrayI i) (Just ty)
@@ -494,7 +492,7 @@ tcExp (ENewArrayI i) (Just ty)
 
 tcExp (EResizeArray e i) Nothing = do  
   e' <- inferType e
-  i' <- checkType i TI32
+  i' <- checkType i (TInt 32)
   let ty = exType e'
   case exType e' of
     TPtr (TPtr _) ->
@@ -509,7 +507,7 @@ tcExp (EResizeArray e i) Nothing = do
 
 tcExp (EResizeArray e i) (Just ty@(TPtr (TPtr ety))) = do  
   e' <- checkType e ety
-  i' <- checkType i TI32
+  i' <- checkType i (TInt 32)
   return $ EType (EResizeArray e' i') ty
 
 tcExp (EResizeArray e i) (Just ty)
@@ -518,13 +516,14 @@ tcExp (EResizeArray e i) (Just ty)
          ++ "Actual: **x   (for some unknown x)"
 
 
-tcExp (ENewStringI i) Nothing = do
-  i' <- checkType i TI32
-  return $ EType (ENewStringI i') (TPtr TI8)
+tcExp (ENewVect _) _ = undefined
+tcExp (ENewVectI _) _ = undefined
 
-tcExp (ENewStringI i) (Just ty) = do
-  i' <- checkType i TI32
-  EType (ENewStringI i') <$> unify ty (TPtr TI8)
+tcExp (ENewString s) (Just ty) =
+  EType (ENewString s) <$> unify (TPtr $ TInt 8) ty
+
+tcExp (ENewString s) Nothing = do
+  return $ EType (ENewString s) (TPtr (TInt 8))
 
 
 -- Expression Operations
@@ -543,8 +542,14 @@ tcLit LNull (Just t1) = do
   l <- getLoc
   fatal $ UnificationFailure l t1 (TPtr t1)
 
+tcLit (LBool b) (Just t1) =
+  EType (ELit $ LBool b) <$> unify t1 (TInt 1)
 
-tcLit (LInt i) Nothing = return $ EType (ELit $ LInt i) TI32
+tcLit (LBool b) Nothing =
+  return $ EType (ELit $ LBool b) (TInt 1)
+
+
+tcLit (LInt i) Nothing = return $ EType (ELit $ LInt i) (TInt 32)
 tcLit (LInt i) (Just ty)
   | isIntTy ty   = return $ EType (ELit $ LInt i) ty
   | isFloatTy ty = return $ EType (ELit $ LDouble (fromIntegral i)) ty
@@ -552,30 +557,22 @@ tcLit (LInt i) (Just ty)
       l <- getLoc
       fatal $ IntLitMismatch l ty i
 
-tcLit (LDouble d) Nothing   = return $ EType (ELit $ LDouble d) TF64
+tcLit (LDouble d) Nothing   = return $ EType (ELit $ LDouble d) (TFp 64)
 tcLit (LDouble d) (Just ty)
   | isFloatTy ty = EType (ELit $ LDouble d) <$> unify ty ty
   | otherwise = do
       l <- getLoc
       fatal $ FpLitMismatch l ty d
 
-tcLit (LChar c) Nothing   = return $ EType (ELit $ LChar c) TI8
-tcLit (LChar c) (Just ty)= EType (ELit $ LChar c) <$> unify ty TI8
+tcLit (LChar c) Nothing   = return $ EType (ELit $ LChar c) (TInt 8)
+tcLit (LChar c) (Just ty)= EType (ELit $ LChar c) <$> unify ty (TInt 8)
 
 -- Strings
 tcLit (LString s) Nothing
-  = return $ EType (ELit $ LString s) (TPtr TI8)
+  = return $ EType (ELit $ LString s) (TPtr (TInt 8))
 tcLit (LString s) (Just ty) =
-  EType (ELit $ LString s) <$> unify ty (TPtr TI8)
+  EType (ELit $ LString s) <$> unify ty (TPtr (TInt 8))
 
-
-tcLit (LStringI i) Nothing = do
-  i' <- checkType i TI32
-  return $ EType (ELit $ LStringI i') (TPtr TI8)
-
-tcLit (LStringI i) (Just ty) = do
-  i' <- checkType i TI32
-  EType (ELit $ LStringI i') <$> unify (TPtr TI8) ty
 
 -- Arrays
 tcLit (LArray []) Nothing
@@ -602,16 +599,19 @@ tcLit (LArray xs) (Just (TArray n ty))
 tcLit (LArray _) (Just ty)
   = error $ "Expected Array type, found " ++ show (pretty ty)
 
+
 tcLit (LArrayI _) Nothing
-       
   = error "Cannot infer array type. Please provide annotations." 
 
 tcLit (LArrayI i) (Just (TArray n ty)) = do
-  i' <- checkType i TI32
+  i' <- checkType i (TInt 32)
   return $ EType (ELit $ LArrayI i) (TArray n ty)
 
 tcLit (LArrayI _) (Just ty)
   = error $ "Expected Array type, found " ++ show (pretty ty)
+
+tcLit (LVect _) _ = undefined
+tcLit (LVectI _) _ = undefined
 
 
 
@@ -642,7 +642,7 @@ tcElse :: MonadTc m => Else -> Maybe Type -> m Else
 tcElse (Else ml e) mty
   = withMayLoc ml $ Else ml <$> tcExp e mty
 tcElse (Elif ml p t f) (Nothing) = withMayLoc ml $ do
-  p' <- checkType p TBool
+  p' <- checkType p (TInt 1)
   t' <- inferType t
   f' <- tcElse f Nothing
   ty <- unify (exType t') (exElseType f')
@@ -650,36 +650,34 @@ tcElse (Elif ml p t f) (Nothing) = withMayLoc ml $ do
 
 
 tcElse (Elif ml p t f) (Just ty) = withMayLoc ml $
-  Elif ml <$> checkType p TBool <*> checkType t ty <*> tcElse f (Just ty)
+  Elif ml <$> checkType p (TInt 1) <*> checkType t ty <*> tcElse f (Just ty)
 
 
 
 
 tcOp :: MonadTc m => Op -> Maybe Type -> m Exp
 tcOp op mty = case op of
-  OpAddI a b -> tcBOp OpAddI a b mty intTypes Nothing
-  OpSubI a b -> tcBOp OpSubI a b mty intTypes Nothing
-  OpMulI a b -> tcBOp OpMulI a b mty intTypes Nothing
-  OpDivI a b -> tcBOp OpDivI a b mty intTypes Nothing
-  OpRemI a b -> tcBOp OpRemI a b mty intTypes Nothing
+  OpAdd a b -> tcBOp OpAdd a b mty numTypes Nothing
+  OpSub a b -> tcBOp OpSub a b mty numTypes Nothing
+  OpMul a b -> tcBOp OpMul a b mty numTypes Nothing
+  OpDiv a b -> tcBOp OpDiv a b mty numTypes Nothing
+  OpRem a b -> tcBOp OpRem a b mty numTypes Nothing
+  OpNeg a -> undefined
 
-  OpAddF a b -> tcBOp OpAddF a b mty floatTypes Nothing
-  OpSubF a b -> tcBOp OpSubF a b mty floatTypes Nothing
-  OpMulF a b -> tcBOp OpMulF a b mty floatTypes Nothing
-  OpDivF a b -> tcBOp OpDivF a b mty floatTypes Nothing
-  OpRemF a b -> tcBOp OpRemF a b mty floatTypes Nothing
+  OpAnd a b -> tcBOp OpAnd a b mty [TInt 1] (Just (TInt 1))
+  OpOr  a b -> tcBOp OpOr  a b mty [TInt 1] (Just (TInt 1))
+  OpXor a b -> tcBOp OpXor a b mty [TInt 1] (Just (TInt 1))
 
-  OpAnd a b -> tcBOp OpAnd a b mty [TBool] (Just TBool)
-  OpOr  a b -> tcBOp OpOr  a b mty [TBool] (Just TBool)
-  OpXor a b -> tcBOp OpXor a b mty [TBool] (Just TBool)
+  OpShR a b -> undefined
+  OpShL a b -> undefined
 
-  OpEqI  a b -> tcBOp OpEqI  a b mty intTypes (Just TBool)
-  OpNeqI a b -> tcBOp OpNeqI a b mty intTypes (Just TBool)
+  OpEq  a b -> tcBOp OpEq  a b mty numTypes (Just (TInt 1))
+  OpNeq a b -> tcBOp OpNeq a b mty numTypes (Just (TInt 1))
   
-  OpLT  a b -> tcBOp OpLT a b mty intTypes (Just TBool)
-  OpLE  a b -> tcBOp OpLE a b mty intTypes (Just TBool)
-  OpGT  a b -> tcBOp OpGT a b mty intTypes (Just TBool)
-  OpGE  a b -> tcBOp OpGE a b mty intTypes (Just TBool)
+  OpLT  a b -> tcBOp OpLT a b mty numTypes (Just (TInt 1))
+  OpLE  a b -> tcBOp OpLE a b mty numTypes (Just (TInt 1))
+  OpGT  a b -> tcBOp OpGT a b mty numTypes (Just (TInt 1))
+  OpGE  a b -> tcBOp OpGE a b mty numTypes (Just (TInt 1))
 
 
 tcBOp :: MonadTc m  => (Exp -> Exp -> Op) -> Exp -> Exp -> Maybe Type

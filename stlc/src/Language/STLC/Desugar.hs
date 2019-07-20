@@ -10,28 +10,20 @@ module Language.STLC.Desugar where
 
 import Language.Syntax.Location
 import Language.STLC.Syntax
-import Language.STLC.Pretty
 import qualified Language.LLTT.Syntax as LL
 
 import Language.STLC.Reduce
 
-import Control.Monad
 import Control.Monad.Reader
 import Data.Bifunctor
-import Data.Maybe
-import Data.List
-import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty ()
 import qualified Data.List.NonEmpty as NE
-import Data.Bitraversable
+import Data.Bitraversable ()
 
 import Unbound.Generics.LocallyNameless
-import Unbound.Generics.LocallyNameless.Name (name2String, s2n)
+import Unbound.Generics.LocallyNameless.Name (name2String)
 
 import Data.Text.Prettyprint.Doc
-import Data.Text.Prettyprint.Doc.Render.Text
-
-import System.IO.Unsafe
-import System.Exit (exitFailure)
 
 -- This pass produces a desugared STLC syntax tree.
 -- The end result of desugaring is a Low-Level Type
@@ -77,7 +69,7 @@ desugarEntry :: Entry -> LL.Entry
 desugarEntry (Entry l n ty) = LL.Entry l n (desugarType ty)
 
 desugarFunc :: MonadDesugar m => Func -> m LL.Func
-desugarFunc (Func l ty fn_n bnd) = withLoc l $ do
+desugarFunc (Func l _ fn_n bnd) = withLoc l $ do
   (ps, body) <- unbind bnd
   let ps' = desugarPat <$> ps
   body' <- desugarExp body
@@ -103,7 +95,7 @@ desugarExp' ty = \case
   ELoc e l -> withLoc l $ LL.ELoc <$> desugarExp' ty e <*> pure l
   EParens e -> LL.EParens <$> desugarExp' ty e
 
-  ELam bnd -> error "Unlifted lambda expression encountered!"
+  ELam _ -> error "Unlifted lambda expression encountered!"
 
   ELet bnd -> do
     (unrec -> letbnds, body) <- unbind bnd
@@ -142,6 +134,12 @@ desugarExp' ty = \case
 
   ENewArray xs -> LL.ENewArray <$> mapM desugarExp xs
   ENewArrayI i -> LL.ENewArrayI <$> desugarExp i
+  EResizeArray e i -> LL.EResizeArray <$> desugarExp e <*> desugarExp i
+
+  ENewVect es -> LL.ENewVect <$> mapM desugarExp es
+  ENewVectI i -> LL.ENewVectI <$> desugarExp i
+
+  ENewString s -> return $ LL.ENewString s
 
   EOp op -> LL.EOp <$> desugarOp op
 
@@ -203,7 +201,7 @@ desugarOp = \case
 
 desugarType :: Type -> LL.Type
 desugarType = \case
-  ty@(TArr a b) ->
+  ty@(TArr _ _) ->
     let (paramtys, retty) = splitType ty
     in LL.TFunc (desugarType retty) (NE.fromList $ desugarType <$> paramtys) 
 

@@ -275,20 +275,24 @@ genType env = \case
   LL.TInt 8  -> i8
   LL.TInt 32 -> i32
   LL.TInt 64 -> i64
+  LL.TInt x -> error $ "Unsupported integer size: " ++ show x ++ " bits"
 
   LL.TUInt 1  -> i1
   LL.TUInt 8  -> i8
   LL.TUInt 32 -> i32
   LL.TUInt 64 -> i64
+  LL.TUInt x -> error $ "Unsupported unsigned integer size: " ++ show x ++ " bits"
 
   LL.TFp 16 -> half
   LL.TFp 32 -> float
   LL.TFp 64 -> double
   LL.TFp 128 -> fp128
+  LL.TFp x -> error $ "Unsupported float size: " ++ show x ++ " bits"
 
   LL.TTuple t (NE.toList -> ts) ->
     StructureType True (genType env <$> (t:ts))
   LL.TArray i ty -> ArrayType (fromIntegral i) (genType env ty)
+  LL.TVect i ty -> VectorType (fromIntegral i) (genType env ty)
   LL.TPtr t -> Ty.ptr (genType env t)
   LL.TFunc retty paramtys -> Ty.FunctionType (genType env retty)
                                              (genType env <$> NE.toList paramtys)
@@ -510,6 +514,35 @@ genExp' env rty = \case
 
         return ty_ptr
 
+  LL.ENewTuple e (NE.toList -> es) -> mdo
+    br tuple_gen_blk
+
+    tuple_gen_blk <- block `named` "tuple.gen"
+    e_ptrs' <- mapM (genExp env) (e:es)
+    br tuple_load_blk
+    
+    tuple_load_blk <- block `named` "tuple.load"
+    es' <- mapM (`load` 4) e_ptrs'
+    br tuple_store_blk
+
+    i8_ptr_ptr <- alloca (Ty.ptr Ty.i8) Nothing 4
+    let f = envLookupFunc "malloc" env
+        s = sum [ LL.sizeType (envSizes env) (LL.exType e) | e <- (e:es) ]
+    r <- call f [(ConstantOperand $ C.Int 32 (toInteger s), [])]
+    store i8_ptr_ptr 4 r
+    ty_ptr_ptr <- bitcast i8_ptr_ptr (genType env rty)
+    ty_ptr <- load ty_ptr_ptr 4
+    br tuple_store_blk
+
+    tuple_store_blk <- block `named` "tuple.store"
+    let go (e', i) = do
+          e_ptr' <- gep ty_ptr [ConstantOperand $ C.Int 32 0, ConstantOperand $ C.Int 32 i]
+          store e_ptr' 4 e'
+    mapM_ go (zip es' [0..])
+
+    return ty_ptr_ptr
+  
+
   LL.ENewCon n args -> do
     case envLookupConstr n env of
       Nothing -> error $ "undefined constructor: " ++ n
@@ -639,6 +672,8 @@ genExp' env rty = \case
 
     return i8_ptr_ptr
 
+  LL.ENewVect es -> undefined
+  LL.ENewVectI i -> undefined
 
   LL.EOp op ->
     genOp env rty op

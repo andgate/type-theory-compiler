@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-unused-matches #-}
 module Language.SystemF.Monomorphize where
 
 import Language.SystemF.Syntax

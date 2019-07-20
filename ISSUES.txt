@@ -1,1 +1,7 @@
 - Codegen cannot generate 16 or 128 bit floating point literals
+- Codegen does not support allocating heap vectors
+- Codegen doesn not support negation
+- Codegen poorly supports right shifts
+- Typechecker does not support negation
+- Typechecker does not support bitshifts
+- Typechecker does not support vector literals
