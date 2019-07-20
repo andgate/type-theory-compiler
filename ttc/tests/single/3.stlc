@@ -14,8 +14,8 @@ fact' n x =
 
 main : I32 -> **I8 -> I32
 main argc argv =
-  let _ = puts (int2str (fact 1) (String 1))
-      _ = puts (int2str (fact 2) (String 1))
-      _ = puts (int2str (fact 3) (String 1))
-      _ = puts (int2str (fact 4) (String 2))
+  let _ = puts (int2str (fact 1) (Array[1]))
+      _ = puts (int2str (fact 2) (Array[1]))
+      _ = puts (int2str (fact 3) (Array[1]))
+      _ = puts (int2str (fact 4) (Array[2]))
   in 0

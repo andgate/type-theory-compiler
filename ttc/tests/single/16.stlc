@@ -5,14 +5,14 @@ extern printint : I32 -> I32
 
 printiptr : *I32 -> I32
 printiptr i =
-  if #eq i (null as I32) then 0
+  if #eq i null then 0
   else let _ = printint *i
        in printstr "\n"
 
 main : I32 -> **I8 -> I32
 main argc argv =
-  let a : *I32 = null
-      b : *I32 = &5
+  let a = null : *I32
+      b = &5 : *I32
       _ = printiptr a
       _ = printiptr b
   in 0

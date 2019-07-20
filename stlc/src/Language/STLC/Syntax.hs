@@ -257,6 +257,16 @@ isFloatTy :: Type -> Bool
 isFloatTy (exTyAnn -> TFp _) = True
 isFloatTy _ = False
 
+isNumType :: Type -> Bool
+isNumType ty = isIntTy ty || isUIntTy ty || isFloatTy ty
+
+isBitType :: Type -> Bool
+isBitType ty = isNumType ty || isPtrTy ty
+
+isBoolType :: Type -> Bool
+isBoolType (exTyAnn -> TInt 1) = True
+isBoolType _ = False
+
 isPtrTy :: Type -> Bool
 isPtrTy (exTyAnn -> ty) = 
   case ty of

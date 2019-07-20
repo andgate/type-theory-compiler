@@ -2,6 +2,7 @@ module Main
 
 extern printstr : *I8 -> I32
 extern printint : I32 -> I32
+extern malloc : I32 -> *I8
 
 type Tree = Tree I32 *Tree *Tree
 
@@ -13,7 +14,6 @@ copyTree t =
   if #eq t null then null
   else case *t of
     Tree x l r -> new Tree x (copyTree l) (copyTree r)
-    Leaf x -> new Leaf x
 
 insertTree : *Tree -> I32 -> *Tree
 insertTree t x = 

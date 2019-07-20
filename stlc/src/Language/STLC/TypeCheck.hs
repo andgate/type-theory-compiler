@@ -450,8 +450,10 @@ tcExp (ESet lhs rhs) mty = do
   return $ EType (ESet lhs' rhs') (exType rhs')
 
 
-tcExp (ENewArray []) Nothing =
-    error $ "Cannot infer type of new array, please provide type annotations."
+tcExp (ENewArray []) Nothing = do
+  vs <- envVars <$> ask
+  error $ "Cannot infer type of new array, please provide type annotations.\n"
+        ++ show vs
 
 tcExp (ENewArray (e:es)) Nothing = do
   e' <- inferType e
@@ -533,7 +535,14 @@ tcExp (EOp op) mty = tcOp op mty
 -- Type checking on literals
 tcLit :: MonadTc m => Lit -> Maybe Type -> m Exp
 
-tcLit LNull Nothing = error "Cannot infer null"
+tcLit LNull Nothing = do
+  vs <- envVars <$> ask
+  l <- envLoc <$> ask
+  error $ show $ vsep [ line <> pretty l <> "error:"
+                      , indent 4 "Cannot infer null"
+                      , indent 4 (pretty $ show vs)
+                      , line
+                      ]
 
 tcLit LNull (Just t1@(exTyAnn -> TPtr _)) =
   return $ EType (ELit LNull) t1
@@ -600,12 +609,13 @@ tcLit (LArray _) (Just ty)
   = error $ "Expected Array type, found " ++ show (pretty ty)
 
 
+-- Sized arrays
 tcLit (LArrayI _) Nothing
   = error "Cannot infer array type. Please provide annotations." 
 
-tcLit (LArrayI i) (Just (TArray n ty)) = do
+tcLit (LArrayI i) (Just (TArray _ ty)) = do
   i' <- checkType i (TInt 32)
-  return $ EType (ELit $ LArrayI i) (TArray n ty)
+  return $ EType (ELit $ LArrayI i) (TPtr ty)
 
 tcLit (LArrayI i) (Just (exTyAnn -> TPtr ty)) = do
   i' <- checkType i (TInt 32)
@@ -613,6 +623,7 @@ tcLit (LArrayI i) (Just (exTyAnn -> TPtr ty)) = do
 
 tcLit (LArrayI _) (Just ty)
   = error $ "Expected Array type, found " ++ show (pretty ty)
+
 
 tcLit (LVect _) _ = undefined
 tcLit (LVectI _) _ = undefined
@@ -661,59 +672,59 @@ tcElse (Elif ml p t f) (Just ty) = withMayLoc ml $
 
 tcOp :: MonadTc m => Op -> Maybe Type -> m Exp
 tcOp op mty = case op of
-  OpAdd a b -> tcBOp OpAdd a b mty numTypes Nothing
-  OpSub a b -> tcBOp OpSub a b mty numTypes Nothing
-  OpMul a b -> tcBOp OpMul a b mty numTypes Nothing
-  OpDiv a b -> tcBOp OpDiv a b mty numTypes Nothing
-  OpRem a b -> tcBOp OpRem a b mty numTypes Nothing
+  OpAdd a b -> tcBOp OpAdd a b mty isNumType Nothing
+  OpSub a b -> tcBOp OpSub a b mty isNumType Nothing
+  OpMul a b -> tcBOp OpMul a b mty isNumType Nothing
+  OpDiv a b -> tcBOp OpDiv a b mty isNumType Nothing
+  OpRem a b -> tcBOp OpRem a b mty isNumType Nothing
   OpNeg a -> undefined
 
-  OpAnd a b -> tcBOp OpAnd a b mty [TInt 1] (Just (TInt 1))
-  OpOr  a b -> tcBOp OpOr  a b mty [TInt 1] (Just (TInt 1))
-  OpXor a b -> tcBOp OpXor a b mty [TInt 1] (Just (TInt 1))
+  OpAnd a b -> tcBOp OpAnd a b mty isBoolType (Just (TInt 1))
+  OpOr  a b -> tcBOp OpOr  a b mty isBoolType (Just (TInt 1))
+  OpXor a b -> tcBOp OpXor a b mty isBoolType (Just (TInt 1))
 
   OpShR a b -> undefined
   OpShL a b -> undefined
 
-  OpEq  a b -> tcBOp OpEq  a b mty numTypes (Just (TInt 1))
-  OpNeq a b -> tcBOp OpNeq a b mty numTypes (Just (TInt 1))
+  OpEq  a b -> tcBOp OpEq  a b mty isBitType (Just (TInt 1))
+  OpNeq a b -> tcBOp OpNeq a b mty isBitType (Just (TInt 1))
   
-  OpLT  a b -> tcBOp OpLT a b mty numTypes (Just (TInt 1))
-  OpLE  a b -> tcBOp OpLE a b mty numTypes (Just (TInt 1))
-  OpGT  a b -> tcBOp OpGT a b mty numTypes (Just (TInt 1))
-  OpGE  a b -> tcBOp OpGE a b mty numTypes (Just (TInt 1))
+  OpLT  a b -> tcBOp OpLT a b mty isNumType (Just (TInt 1))
+  OpLE  a b -> tcBOp OpLE a b mty isNumType (Just (TInt 1))
+  OpGT  a b -> tcBOp OpGT a b mty isNumType (Just (TInt 1))
+  OpGE  a b -> tcBOp OpGE a b mty isNumType (Just (TInt 1))
 
 
 tcBOp :: MonadTc m  => (Exp -> Exp -> Op) -> Exp -> Exp -> Maybe Type
-                    -> [Type] -> Maybe Type -> m Exp
-tcBOp constr a b Nothing paramtys Nothing = do
+                    -> (Type -> Bool) -> Maybe Type -> m Exp
+tcBOp constr a b Nothing isSupported Nothing = do
   a' <- inferType a
   let aty = exType a'
-  unless (aty `elem` paramtys)
-        $ error $ "Operation has unexpected type:"
+  unless (isSupported aty)
+        $ error $ show $ "Operation has unexpected type:" <+> pretty aty
   b' <- checkType b aty
   let op' = constr a' b'
   return $ EType (EOp op') aty
 
-tcBOp constr a b (Just ty) paramtys Nothing = do
-  unless (ty `elem` paramtys)
+tcBOp constr a b (Just ty) isSupported Nothing = do
+  unless (isSupported ty)
        $ error $ "Operation has unexpected type"
   op' <- constr <$> checkType a ty <*> checkType b ty
   return $ EType (EOp op') ty
 
-tcBOp constr a b Nothing paramtys (Just retty) = do
+tcBOp constr a b Nothing isSupported (Just retty) = do
   a' <- inferType a
   let aty = exType a'
-  unless (aty `elem` paramtys)
+  unless (isSupported aty)
       $ error $ "Operation has unexpected type!"
   b' <- checkType b aty
   let op' = constr a' b'
   return $ EType (EOp op') retty
 
-tcBOp constr a b (Just ty) paramtys (Just retty) = do
+tcBOp constr a b (Just ty) isSupported (Just retty) = do
   a' <- inferType a
   let aty = exType a'
-  unless (aty `elem` paramtys)
+  unless (isSupported aty)
       $ error $ "Operation has unexpected type!"
   b' <- checkType b aty
   let op' = constr a' b'
