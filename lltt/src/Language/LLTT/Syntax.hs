@@ -279,9 +279,16 @@ isPtrTy (exTyAnn -> ty) =
     TArray _ _ -> True
     TVect _ _ -> True
     TPtr _ -> True
-    TFunc _ _ -> True
     _ -> False
 
+
+exPtrTyElem :: Type -> Type
+exPtrTyElem (exTyAnn -> ty) = 
+  case ty of
+    TArray _ ety -> ety
+    TVect _  ety -> ety
+    TPtr     ety -> ety
+    _ -> error "expected a pointer type"
 
 ---------------------------------------------------------------------------
 -- Patterns

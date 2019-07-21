@@ -688,7 +688,9 @@ genConstrArg env ptr (arg_ptr, i) = do
 
 genLit :: (MonadCodeGen m) => Env -> LL.Type -> LL.Lit -> IRBuilderT m Operand
 genLit env ty = \case
-  LL.LNull -> return $ ConstantOperand $ C.Null (genType env ty)
+  LL.LNull ->
+    return $ ConstantOperand $ C.Null (genType env (LL.exPtrTyElem ty))
+
   LL.LInt i ->
     case (LL.exTyAnn ty) of
       LL.TInt 1 -> do
@@ -947,43 +949,43 @@ genOp env rty = \case
   LL.OpOr  a b -> genBinaryOp env I.or  rty a b
   LL.OpXor a b -> genBinaryOp env I.xor rty a b
 
-  LL.OpShR a b -> genBinaryOp env I.lshr rty a b
-  LL.OpShL a b -> genBinaryOp env I.shl rty a b
+  LL.OpShR a b -> error "#shr not supported"
+  LL.OpShL a b -> error "#shl not supported"
 
-  LL.OpEq a b
-    | LL.isIntTy  rty || LL.isUIntTy rty
+  LL.OpEq a@(LL.exType -> ty) b
+    | LL.isIntTy ty || LL.isUIntTy ty || LL.isPtrTy ty
         -> genBinaryOp env (icmp AST.EQ) rty a b
-    | LL.isFloatTy rty -> genBinaryOp env (fcmp Fp.OEQ) rty a b
+    | LL.isFloatTy ty -> genBinaryOp env (fcmp Fp.OEQ) rty a b
     | otherwise -> error "Couldn't generate operation"
 
-  LL.OpNeq a b
-    | LL.isIntTy rty || LL.isUIntTy rty
+  LL.OpNeq a@(LL.exType -> ty) b
+    | LL.isIntTy ty || LL.isUIntTy ty || LL.isPtrTy ty
         -> genBinaryOp env (icmp AST.NE) rty a b
-    | LL.isFloatTy rty -> genBinaryOp env (fcmp Fp.ONE) rty a b
+    | LL.isFloatTy ty -> genBinaryOp env (fcmp Fp.ONE) rty a b
     | otherwise -> error "Couldn't generate operation"
 
-  LL.OpLT a b
-    | LL.isIntTy   rty -> genBinaryOp env (icmp AST.SLT) rty a b
-    | LL.isUIntTy  rty -> genBinaryOp env (icmp AST.ULT) rty a b
-    | LL.isFloatTy rty -> genBinaryOp env (fcmp Fp.OLT) rty a b
+  LL.OpLT a@(LL.exType -> ty) b
+    | LL.isIntTy   ty -> genBinaryOp env (icmp AST.SLT) rty a b
+    | LL.isUIntTy  ty -> genBinaryOp env (icmp AST.ULT) rty a b
+    | LL.isFloatTy ty -> genBinaryOp env (fcmp Fp.OLT) rty a b
     | otherwise -> error "Couldn't generate operation"
 
-  LL.OpLE a b
-    | LL.isIntTy   rty -> genBinaryOp env (icmp AST.SLE) rty a b
-    | LL.isUIntTy  rty -> genBinaryOp env (icmp AST.ULE) rty a b
-    | LL.isFloatTy rty -> genBinaryOp env (fcmp Fp.OLE) rty a b
+  LL.OpLE a@(LL.exType -> ty) b
+    | LL.isIntTy   ty -> genBinaryOp env (icmp AST.SLE) rty a b
+    | LL.isUIntTy  ty -> genBinaryOp env (icmp AST.ULE) rty a b
+    | LL.isFloatTy ty -> genBinaryOp env (fcmp Fp.OLE) rty a b
     | otherwise -> error "Couldn't generate operation"
 
-  LL.OpGT a b
-    | LL.isIntTy   rty -> genBinaryOp env (icmp AST.SGT) rty a b
-    | LL.isUIntTy  rty -> genBinaryOp env (icmp AST.UGT) rty a b
-    | LL.isFloatTy rty -> genBinaryOp env (fcmp Fp.OGT) rty a b
+  LL.OpGT a@(LL.exType -> ty) b
+    | LL.isIntTy   ty -> genBinaryOp env (icmp AST.SGT) rty a b
+    | LL.isUIntTy  ty -> genBinaryOp env (icmp AST.UGT) rty a b
+    | LL.isFloatTy ty -> genBinaryOp env (fcmp Fp.OGT) rty a b
     | otherwise -> error "Couldn't generate operation"
 
-  LL.OpGE a b
-    | LL.isIntTy   rty -> genBinaryOp env (icmp AST.SGE) rty a b
-    | LL.isUIntTy  rty -> genBinaryOp env (icmp AST.UGE) rty a b
-    | LL.isFloatTy rty -> genBinaryOp env (fcmp Fp.OGE) rty a b
+  LL.OpGE a@(LL.exType -> ty) b
+    | LL.isIntTy   ty -> genBinaryOp env (icmp AST.SGE) rty a b
+    | LL.isUIntTy  ty -> genBinaryOp env (icmp AST.UGE) rty a b
+    | LL.isFloatTy ty -> genBinaryOp env (fcmp Fp.OGE) rty a b
     | otherwise -> error "Couldn't generate operation"
 
 

@@ -610,8 +610,13 @@ tcLit (LArray _) (Just ty)
 
 
 -- Sized arrays
-tcLit (LArrayI _) Nothing
-  = error "Cannot infer array type. Please provide annotations." 
+tcLit (LArrayI _) Nothing = do
+  l <- envLoc <$> ask
+  error $ show $ vsep
+    [ line <> pretty l  <> "error:"
+    , indent 4 "Cannot infer array type. Please provide annotations."
+    , line
+    ]
 
 tcLit (LArrayI i) (Just (TArray _ ty)) = do
   i' <- checkType i (TInt 32)

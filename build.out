@@ -1,0 +1,860 @@
+Build profile: -w ghc-8.6.4 -O1
+In order, the following will be built (use -v for more details):
+ - ttc-0.1.0.0 (test:ttc-golden) --enable-profiling (ephemeral targets)
+Preprocessing test suite 'ttc-golden' for ttc-0.1.0.0..
+Building test suite 'ttc-golden' for ttc-0.1.0.0..
+Running 1 test suites...
+Test suite ttc-golden: RUNNING...
+TTC Golden Tests
+  Golden Test 8 (Single-File):  Up to date
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_STATIC), stack trace: 
+  Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+Up to date
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_STATIC), stack trace: 
+  Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+OK
+  Golden Test 11 (Single-File): OK (0.28s)
+  Golden Test 6 (Single-File):  Up to date
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_STATIC), stack trace: 
+  Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+Up to date
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_STATIC), stack trace: 
+  Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+OK
+  Golden Test 10 (Single-File): Up to date
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_STATIC), stack trace: 
+  Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  Control.Monad.Trans.AnyCont.runAnyContT,
+  called from LLVM.Internal.Instruction.guardNonVoidType,
+  called from LLVM.Internal.EncodeAST.defineLocal,
+  called from LLVM.Internal.EncodeAST.refer,
+  called from LLVM.Internal.EncodeAST.referOrThrow,
+  called from LLVM.Internal.Coding.peekArray,
+  called from LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.EncodeAST.phase,
+  called from LLVM.Internal.EncodeAST.defineType,
+  called from LLVM.Internal.Coding.peek,
+  called from LLVM.Internal.Coding.alloca,
+  called from LLVM.Internal.FFI.ShortByteString.useAsCString,
+  called from LLVM.Internal.Type.createNamedType,
+  called from LLVM.Internal.Module.setMetadata,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  Control.Monad.Catch.bracket,
+  called from LLVM.Internal.EncodeAST.runEncodeAST,
+  called from LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  Control.Monad.Catch.bracket,
+  called from LLVM.Internal.EncodeAST.runEncodeAST,
+  called from LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  Control.Monad.Catch.bracket,
+  called from LLVM.Internal.EncodeAST.runEncodeAST,
+  called from LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+ttc: EncodeException "Null pointer constant must have pointer type but has type NamedTypeReference (Name \"Tree\")."
+OK (0.30s)
+  Golden Test 13 (Single-File): Up to date
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_STATIC), stack trace: 
+  Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  Control.Monad.Trans.AnyCont.runAnyContT,
+  called from Control.Monad.Catch.bracket,
+  called from LLVM.Internal.EncodeAST.runEncodeAST,
+  called from LLVM.Internal.Global.setThreadLocalMode,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  Control.Monad.Catch.bracket,
+  called from LLVM.Internal.EncodeAST.runEncodeAST,
+  called from LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  Control.Monad.Catch.bracket,
+  called from LLVM.Internal.EncodeAST.runEncodeAST,
+  called from LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_1_0), stack trace: 
+  Control.Monad.Catch.bracket,
+  called from LLVM.Internal.EncodeAST.runEncodeAST,
+  called from LLVM.Internal.Coding.allocaArray,
+  called from LLVM.Internal.Attribute.allocaAttrBuilder,
+  called from LLVM.Internal.Function.setFunctionAttributes,
+  called from LLVM.Internal.EncodeAST.defineGlobal,
+  called from LLVM.Internal.Module.readModule,
+  called from LLVM.Internal.Module.withModuleFromAST,
+  called from LLVM.Internal.Context.withContext,
+  called from Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+ttc: EncodeException "Null pointer constant must have pointer type but has type IntegerType {typeBits = 32}."
+FAIL (0.13s)
+    callCommand: cabal new-run ttc -- +RTS -xc -RTS tests/single/13.stlc -o tests/bin/single/13 --build-dir tests/build/single/13/ (exit 1): failed
+  Golden Test 16 (Single-File): FAIL (0.10s)
+    callCommand: cabal new-run ttc -- +RTS -xc -RTS tests/single/16.stlc -o tests/bin/single/16 --build-dir tests/build/single/16/ (exit 1): failed
+  Golden Test 1 (Single-File):  Up to date
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_STATIC), stack trace: 
+  Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+Up to date
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_STATIC), stack trace: 
+  Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+LLVM ERROR: Cannot select: 0x2d635c8: i64 = sint_to_fp 0x2d63018
+  0x2d63018: f32,ch = load<(load 4 from constant-pool)> 0x2cee768, 0x2d658b8, undef:i64
+    0x2d658b8: i64 = X86ISD::Wrapper TargetConstantPool:i64<float 1.000000e+00> 0
+      0x2d63080: i64 = TargetConstantPool<float 1.000000e+00> 0
+    0x2d62ee0: i64 = undef
+In function: main
+OK
+  Golden Test 15 (Single-File): FAIL (0.09s)
+    callCommand: cabal new-run ttc -- +RTS -xc -RTS tests/single/15.stlc -o tests/bin/single/15 --build-dir tests/build/single/15/ (exit 1): failed
+  Golden Test 3 (Single-File):  Up to date
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_STATIC), stack trace: 
+  Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+Up to date
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_STATIC), stack trace: 
+  Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+OK (0.26s)
+  Golden Test 2 (Single-File):  OK (0.24s)
+  Golden Test 4 (Single-File):  Up to date
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_STATIC), stack trace: 
+  Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+OK
+  Golden Test 7 (Single-File):  Up to date
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_STATIC), stack trace: 
+  Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+OK (0.28s)
+  Golden Test 12 (Single-File): Up to date
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_STATIC), stack trace: 
+  Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+Up to date
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_STATIC), stack trace: 
+  Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+OK (0.30s)
+  Golden Test 14 (Single-File): Up to date
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_STATIC), stack trace: 
+  Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+OK (0.26s)
+  Golden Test 5 (Single-File):  Up to date
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK), stack trace: 
+  Compiler.runCompiler,
+  called from Main.main
+*** Exception (reporting due to +RTS -xc): (THUNK_STATIC), stack trace: 
+  Compiler.compileSTLC,
+  called from Compiler.runCompiler,
+  called from Main.main
+ttc: /nix/store/gk44g31ikiim0v4y49nrv6np9hka20zn-llvm-8.0.0/include/llvm/IR/Instructions.h:847: llvm::Type* llvm::checkGEPType(llvm::Type*): Assertion `Ty && "Invalid GetElementPtrInst indices for type!"' failed.
+OK (0.27s)
+  Golden Test 9 (Single-File):  FAIL (0.11s)
+    callCommand: cabal new-run ttc -- +RTS -xc -RTS tests/single/9.stlc -o tests/bin/single/9 --build-dir tests/build/single/9/ (exit -6): failed
+
+4 out of 16 tests failed (3.75s)
+Test suite ttc-golden: FAIL
+Test suite logged to:
+/home/gabe/type-theory-compiler/dist-newstyle/build/x86_64-linux/ghc-8.6.4/ttc-0.1.0.0/t/ttc-golden/test/ttc-0.1.0.0-ttc-golden.log
+0 of 1 test suites (0 of 1 test cases) passed.
