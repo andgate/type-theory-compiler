@@ -285,7 +285,10 @@ constrs :: { [ConstrDefn] }
   : sep_by1(constr_defn, '|') { $1 }
 
 constr_defn :: { ConstrDefn }
-  : con_id many(atype)
+  : con_id
+    { ConstrDefn (locOf $1) (unL $1) [] } 
+  
+  | con_id some(atype)
     { ConstrDefn ($1 <++> $2) (unL $1) $2 }
   
   | con_id '{' sep_by1_ne(entry_defn, ',') '}'
@@ -379,14 +382,14 @@ primOp :: { L Op }
   | '#mul' aexp aexp { L (OpMul $2 $3) ($1<++>$3) }
   | '#div' aexp aexp { L (OpDiv $2 $3) ($1<++>$3) }
   | '#rem' aexp aexp { L (OpRem $2 $3) ($1<++>$3) }
-  | '#neg' aexp      { L (OpNeg $2)     ($1<++>$2) }
+  | '#neg' aexp      { L (OpNeg $2)    ($1<++>$2) }
 
   | '#and' aexp aexp { L (OpAnd $2 $3) ($1<++>$3) }
   | '#or'  aexp aexp { L (OpOr $2 $3)  ($1<++>$3) }
   | '#xor' aexp aexp { L (OpXor $2 $3) ($1<++>$3) }
+
   | '#shr' aexp aexp { L (OpShR $2 $3) ($1<++>$3) }
   | '#shl' aexp aexp { L (OpShL $2 $3) ($1<++>$3) }
-
 
   | '#eq'  aexp aexp { L (OpEq $2 $3)  ($1<++>$3) }
   | '#neq' aexp aexp { L (OpNeq $2 $3) ($1<++>$3) }

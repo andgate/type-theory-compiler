@@ -35,6 +35,24 @@ data Func = Func Loc String [Pat] Exp
 data Extern = Extern Loc String [Type] Type
   deriving(Show)
 
+
+data SName = SName String NameClass
+
+data NameClass
+  = VarName
+  | ConName
+  | TyConName
+
+getModuleNames :: Module -> [(SName, Loc)]
+getModuleNames (Module _ _ body)
+  = concatMap getDefnNames body
+
+getDefnNames :: Defn -> [(SName, Loc)]
+getDefnNames = \case
+  FuncDefn   (Func   l n _ _) -> [(SName n VarName, l)]
+  ExternDefn (Extern l n _ _) -> [(SName n VarName, l)]
+  DataTypeDefn dt -> getDataTypeNames dt
+
 ---------------------------------------------------------------------------
 -- Data Types
 ---------------------------------------------------------------------------
@@ -55,6 +73,20 @@ constrName = \case
 
 data Entry = Entry Loc String Type
   deriving (Show)
+
+
+getDataTypeNames :: DataType -> [(SName, Loc)]
+getDataTypeNames (DataType l n constrs)
+  = (SName n TyConName, l) : concatMap getConstrNames constrs
+
+getConstrNames :: ConstrDefn -> [(SName, Loc)]
+getConstrNames = \case
+  ConstrDefn l n _ -> [(SName n ConName, l)]
+  RecordDefn l n (NE.toList -> es)
+    -> (SName n ConName, l) : (concatMap getEntryNames es)
+
+getEntryNames :: Entry -> [(SName, Loc)]
+getEntryNames (Entry l n _) = [(SName n VarName, l)]
 
 
 ---------------------------------------------------------------------------

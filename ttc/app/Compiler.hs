@@ -17,6 +17,7 @@ import qualified Language.STLC.Lex.Format as STLC
 import qualified Language.STLC.Lex.Token as STLC
 import qualified Language.STLC.Parse as STLC
 import qualified Language.STLC.Syntax as STLC
+import qualified Language.STLC.Namecheck as STLC
 import qualified Language.STLC.TypeCheck as STLC
 
 import Language.LLTT.Pretty
@@ -67,6 +68,16 @@ runCompiler Compiler{..} = do
   llmodules <- mapM (compileSTLC cBuildDir) cInputs
   callCommand $ "clang -Wno-unused-command-line-argument -Wno-override-module -O2 rts.c " <> unwords llmodules <> " -o " <> cOutput
  
+
+handleErrors :: Pretty e => Either [e] a -> IO a
+handleErrors = either printErrors pure
+
+printErrors :: Pretty e => [e] -> IO a
+printErrors errs = do 
+  putDoc $ vsep <$> pretty errs
+  exitFailure
+
+
 lexSTLC :: FilePath -> String -> [STLC.Token]
 lexSTLC fp c =
   case runExcept $ STLC.lex fp (pack c) of
@@ -83,7 +94,9 @@ compileSTLC build_dir in_fp = do
 
   let build_fp = build_dir <> takeBaseName in_fp
 
-  stlc' <- reportTcErr $ STLC.checkModule stlc
+  stlc1 <- handleErrors $ STLC.namecheck (STLC.getModuleNames stlc) stlc
+
+  stlc' <- handleErrors $ STLC.checkModule stlc1
   withFile (build_fp <> ".stlc.typed") WriteMode $ \h ->
     hPutDoc h $ pretty stlc'
   
@@ -108,11 +121,3 @@ compileSTLC build_dir in_fp = do
   callCommand $ "clang -Wno-unused-command-line-argument -Wno-override-module -O2 -S -emit-llvm " <> irfp <> " -o " <> irfp <> ".opt2"
 
   return (build_fp <> ".o")
-
-
-reportTcErr :: Either [STLC.TcErr] a -> IO a
-reportTcErr = \case
-  Left errs -> do
-    putDoc $ vsep (pretty <$> errs)
-    exitFailure
-  Right a -> return a

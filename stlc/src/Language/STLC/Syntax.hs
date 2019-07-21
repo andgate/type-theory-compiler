@@ -32,7 +32,10 @@ import Unbound.Generics.LocallyNameless
 --             , Monomorphic
 --             , No Partial Application
 
-type Var = Name Exp
+
+---------------------------------------------------------------------------
+-- Module and Definitions
+---------------------------------------------------------------------------
 
 data Module = Module Loc String [Defn]
 
@@ -45,7 +48,35 @@ data Defn
 data Extern = Extern Loc String [Type] Type
   deriving (Show, Generic, Typeable)
 
--- This could use a refactor of some kind
+
+---------------------------------------------------------------------------
+-- Syntax Name
+---------------------------------------------------------------------------
+
+data SName = SName String NameClass
+  deriving (Show, Eq, Ord)
+
+data NameClass
+  = VarName
+  | ConName
+  | TyConName
+  deriving (Show, Eq, Ord)
+
+getModuleNames :: Module -> [(SName, Loc)]
+getModuleNames (Module _ _ body)
+  = concatMap getDefnNames body
+
+getDefnNames :: Defn -> [(SName, Loc)]
+getDefnNames = \case
+  FuncDefn   (Func   l _ n _) -> [(SName n VarName, l)]
+  ExternDefn (Extern l n _ _) -> [(SName n VarName, l)]
+  DataTypeDefn dt -> getDataTypeNames dt
+
+
+---------------------------------------------------------------------------
+-- Datatype
+---------------------------------------------------------------------------
+
 data DataType =
   DataType Loc String [ConstrDefn]
   deriving (Show, Generic, Typeable)
@@ -55,6 +86,12 @@ data ConstrDefn
   | RecordDefn Loc String (NonEmpty Entry)
   deriving (Show, Generic, Typeable)
 
+-- Record Entry
+data Entry = Entry Loc String Type
+  deriving (Show, Generic, Typeable)
+
+
+-- Name retrival for type checking and code generation
 constrName :: ConstrDefn -> String
 constrName = \case
   ConstrDefn _ n _ -> n
@@ -71,9 +108,24 @@ getEntries = \case
   RecordDefn _ _ ens -> NE.toList ens 
 
 
-data Entry = Entry Loc String Type
-  deriving (Show, Generic, Typeable)
+-- Name retrival for name checking
+getDataTypeNames :: DataType -> [(SName, Loc)]
+getDataTypeNames (DataType l n constrs)
+  = (SName n TyConName, l) : concatMap getConstrNames constrs
 
+getConstrNames :: ConstrDefn -> [(SName, Loc)]
+getConstrNames = \case
+  ConstrDefn l n _ -> [(SName n ConName, l)]
+  RecordDefn l n (NE.toList -> es)
+    -> (SName n ConName, l) : (concatMap getEntryNames es)
+
+getEntryNames :: Entry -> [(SName, Loc)]
+getEntryNames (Entry l n _) = [(SName n VarName, l)]
+
+
+---------------------------------------------------------------------------
+-- Telescope
+---------------------------------------------------------------------------
 
 data Telescope a
   = TeleEmpty
@@ -90,16 +142,23 @@ untelescope (TeleCons bnd) =
   let (a, t) = unrebind bnd
   in a : untelescope t
 
+
+---------------------------------------------------------------------------
+-- Function
+---------------------------------------------------------------------------
+
 data Func = Func Loc Type String (Bind [Pat] Exp)
     deriving (Show, Generic, Typeable)
-
 
 func :: Loc -> String -> Type -> [Pat] -> Exp -> Func
 func l n ty ps body = Func l ty n (bind ps body)
 
+
 ---------------------------------------------------------------------------
 -- Expressions
 ---------------------------------------------------------------------------
+
+type Var = Name Exp
 
 data Exp
   = EVar Var

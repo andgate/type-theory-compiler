@@ -689,7 +689,7 @@ genConstrArg env ptr (arg_ptr, i) = do
 genLit :: (MonadCodeGen m) => Env -> LL.Type -> LL.Lit -> IRBuilderT m Operand
 genLit env ty = \case
   LL.LNull ->
-    return $ ConstantOperand $ C.Null (genType env (LL.exPtrTyElem ty))
+    return $ ConstantOperand $ C.Null (genType env ty)
 
   LL.LInt i ->
     case (LL.exTyAnn ty) of
