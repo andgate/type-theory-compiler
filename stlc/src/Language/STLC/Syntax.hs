@@ -15,7 +15,10 @@ module Language.STLC.Syntax where
 
 import Language.Syntax.Location
 
+import Control.Monad.Reader
 import Data.Bifunctor
+import Data.DList (DList)
+import qualified Data.DList as DL
 import Data.List.NonEmpty (NonEmpty, (<|))
 import qualified Data.List.NonEmpty as NE
 import Data.Typeable (Typeable)
@@ -370,6 +373,13 @@ exPAnn = \case
   p -> p
 
 
+instance HasLocation Pat where
+  locOf = \case
+    PLoc _ l -> l
+    PType p _ -> locOf p
+    _ -> error "expected pattern with location"
+
+
 -- Clauses (Case branches)
 data Clause = Clause (Maybe Loc) (Bind Pat Exp)
   deriving (Show, Generic, Typeable)
@@ -386,6 +396,25 @@ exClauseBody (Clause _ bnd)
 
 pvar :: String -> Pat
 pvar = PVar . s2n
+
+patVars :: Pat -> [(String, Loc)]
+patVars pat = DL.toList $ flip runReader (locOf pat) (go pat)
+  where
+    go :: Pat -> Reader Loc (DList (String, Loc))
+    go = \case
+      PVar v ->
+        ask >>= \l -> return $ pure (name2String v, l)
+      
+      PCon _ ps
+        -> mconcat <$> mapM go ps
+      PTuple p (NE.toList -> ps)
+        -> mconcat <$> mapM go (p:ps)
+
+      PWild -> return mempty
+      PType p _ -> go p
+      PLoc  p l -> withReader (const l) $ go p
+      PParens p -> go p
+
 
 patTypedVars :: Pat -> [(String, Type)]
 patTypedVars p = patTypedVars' (exPType p) p
@@ -414,6 +443,9 @@ splitType ty =
 ---------------------------------------------------------------------------
 -- Location instances
 ---------------------------------------------------------------------------
+
+instance HasLocation Module where
+  locOf (Module l _ _) = l
 
 instance HasLocation ConstrDefn where
   locOf = \case
@@ -448,12 +480,6 @@ instance HasLocation Type where
     TLoc _ l -> l
     TParens t -> locOf t
     _ -> error $ "expected located type!"
-
-instance HasLocation Pat where
-  locOf = \case
-    PLoc _ l -> l
-    PParens p -> locOf p
-    _ -> error $ "expected located pattern!"
 
 
 ---------------------------------------------------------------------------
