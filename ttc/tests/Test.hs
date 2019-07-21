@@ -8,9 +8,7 @@ import Test.Tasty.Golden (goldenVsFile, findByExtension)
 
 import System.Directory (listDirectory, removeDirectoryRecursive, createDirectoryIfMissing, doesDirectoryExist)
 import System.FilePath (takeBaseName, replaceExtension, (</>))
-import System.Process (callCommand, waitForProcess)
-
-import System.Exit (exitWith, ExitCode(..), die)
+import System.Process (callCommand)
 
 
 main :: IO ()

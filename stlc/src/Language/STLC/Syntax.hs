@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE LambdaCase,
              FlexibleInstances, 
              MultiParamTypeClasses, 
@@ -9,15 +10,17 @@
              KindSignatures,
              StandaloneDeriving,
              ViewPatterns
-  #-}
+          #-}
 module Language.STLC.Syntax where
 
 import Language.Syntax.Location
 
+import Control.Monad.Reader
 import Data.Bifunctor
+import Data.DList (DList)
+import qualified Data.DList as DL
 import Data.List.NonEmpty (NonEmpty, (<|))
 import qualified Data.List.NonEmpty as NE
-import Data.Foldable
 import Data.Typeable (Typeable)
 import GHC.Generics (Generic)
 import Unbound.Generics.LocallyNameless
@@ -29,7 +32,10 @@ import Unbound.Generics.LocallyNameless
 --             , Monomorphic
 --             , No Partial Application
 
-type Var = Name Exp
+
+---------------------------------------------------------------------------
+-- Module and Definitions
+---------------------------------------------------------------------------
 
 data Module = Module Loc String [Defn]
 
@@ -42,7 +48,35 @@ data Defn
 data Extern = Extern Loc String [Type] Type
   deriving (Show, Generic, Typeable)
 
--- This could use a refactor of some kind
+
+---------------------------------------------------------------------------
+-- Syntax Name
+---------------------------------------------------------------------------
+
+data SName = SName String NameClass
+  deriving (Show, Eq, Ord)
+
+data NameClass
+  = VarName
+  | ConName
+  | TyConName
+  deriving (Show, Eq, Ord)
+
+getModuleNames :: Module -> [(SName, Loc)]
+getModuleNames (Module _ _ body)
+  = concatMap getDefnNames body
+
+getDefnNames :: Defn -> [(SName, Loc)]
+getDefnNames = \case
+  FuncDefn   (Func   l _ n _) -> [(SName n VarName, l)]
+  ExternDefn (Extern l n _ _) -> [(SName n VarName, l)]
+  DataTypeDefn dt -> getDataTypeNames dt
+
+
+---------------------------------------------------------------------------
+-- Datatype
+---------------------------------------------------------------------------
+
 data DataType =
   DataType Loc String [ConstrDefn]
   deriving (Show, Generic, Typeable)
@@ -52,6 +86,12 @@ data ConstrDefn
   | RecordDefn Loc String (NonEmpty Entry)
   deriving (Show, Generic, Typeable)
 
+-- Record Entry
+data Entry = Entry Loc String Type
+  deriving (Show, Generic, Typeable)
+
+
+-- Name retrival for type checking and code generation
 constrName :: ConstrDefn -> String
 constrName = \case
   ConstrDefn _ n _ -> n
@@ -68,9 +108,24 @@ getEntries = \case
   RecordDefn _ _ ens -> NE.toList ens 
 
 
-data Entry = Entry Loc String Type
-  deriving (Show, Generic, Typeable)
+-- Name retrival for name checking
+getDataTypeNames :: DataType -> [(SName, Loc)]
+getDataTypeNames (DataType l n constrs)
+  = (SName n TyConName, l) : concatMap getConstrNames constrs
 
+getConstrNames :: ConstrDefn -> [(SName, Loc)]
+getConstrNames = \case
+  ConstrDefn l n _ -> [(SName n ConName, l)]
+  RecordDefn l n (NE.toList -> es)
+    -> (SName n ConName, l) : (concatMap getEntryNames es)
+
+getEntryNames :: Entry -> [(SName, Loc)]
+getEntryNames (Entry l n _) = [(SName n VarName, l)]
+
+
+---------------------------------------------------------------------------
+-- Telescope
+---------------------------------------------------------------------------
 
 data Telescope a
   = TeleEmpty
@@ -87,16 +142,23 @@ untelescope (TeleCons bnd) =
   let (a, t) = unrebind bnd
   in a : untelescope t
 
+
+---------------------------------------------------------------------------
+-- Function
+---------------------------------------------------------------------------
+
 data Func = Func Loc Type String (Bind [Pat] Exp)
     deriving (Show, Generic, Typeable)
-
 
 func :: Loc -> String -> Type -> [Pat] -> Exp -> Func
 func l n ty ps body = Func l ty n (bind ps body)
 
+
 ---------------------------------------------------------------------------
 -- Expressions
 ---------------------------------------------------------------------------
+
+type Var = Name Exp
 
 data Exp
   = EVar Var
@@ -130,8 +192,10 @@ data Exp
   | ENewArrayI Exp
   | EResizeArray Exp Exp
 
+  | ENewVect [Exp]
+  | ENewVectI Exp
+
   | ENewString String
-  | ENewStringI Exp
 
   | EOp Op
   deriving (Show, Generic, Typeable)
@@ -145,14 +209,15 @@ exEAnn = \case
 -- Literals
 data Lit
   = LNull
-  | LInt Int
+  | LBool Bool
+  | LInt Integer
   | LDouble Double
   | LChar Char
-  | LBool Bool
   | LString String
-  | LStringI Exp
   | LArray [Exp]
   | LArrayI Exp
+  | LVect [Exp]
+  | LVectI Exp
   deriving (Show, Generic, Typeable)
 
 -- Else Branches
@@ -163,25 +228,21 @@ data Else
 
 -- Operations
 data Op
-  = OpAddI Exp Exp
-  | OpSubI Exp Exp
-  | OpMulI Exp Exp
-  | OpDivI Exp Exp
-  | OpRemI Exp Exp
+  = OpAdd Exp Exp
+  | OpSub Exp Exp
+  | OpMul Exp Exp
+  | OpDiv Exp Exp
+  | OpRem Exp Exp
   | OpNeg Exp
-  
-  | OpAddF Exp Exp
-  | OpSubF Exp Exp
-  | OpMulF Exp Exp
-  | OpDivF Exp Exp
-  | OpRemF Exp Exp
 
   | OpAnd Exp Exp
   | OpOr  Exp Exp
   | OpXor Exp Exp
+  | OpShR Exp Exp
+  | OpShL Exp Exp
 
-  | OpEqI Exp Exp
-  | OpNeqI Exp Exp
+  | OpEq Exp Exp
+  | OpNeq Exp Exp
   | OpLT Exp Exp
   | OpGT Exp Exp
   | OpGE Exp Exp
@@ -213,25 +274,69 @@ elam ps body = ELam (bind (NE.fromList ps) body)
 data Type
   = TArr Type Type
   | TCon String
-  | TBool
-  | TI8
-  | TI32
-  | TI64
-  | TF32
-  | TF64
+  | TInt Int
+  | TUInt Int
+  | TFp Int
   | TTuple Type (NonEmpty Type)
   | TArray Int Type 
+  | TVect Int Type
   | TPtr Type
   | TLoc Type Loc
   | TParens Type
   deriving (Show, Generic, Typeable)
 
 
+intSizes :: [Int]
+intSizes = [1, 8, 16, 32, 64]
+
+uintSizes :: [Int]
+uintSizes = [8, 16, 32, 64]
+
+floatSizes :: [Int]
+floatSizes = [16, 32, 64, 128]
+
 intTypes :: [Type]
-intTypes = [TI8, TI32, TI64]
+intTypes = TInt <$> intSizes
+
+uintTypes :: [Type]
+uintTypes = TUInt <$> uintSizes
 
 floatTypes :: [Type]
-floatTypes = [TF32, TF64]
+floatTypes = TFp <$> floatSizes
+
+numTypes :: [Type]
+numTypes = intTypes <> uintTypes <> floatTypes
+
+isIntTy :: Type -> Bool
+isIntTy (exTyAnn -> TInt _) = True
+isIntTy _ = False
+
+isUIntTy :: Type -> Bool
+isUIntTy (exTyAnn -> TUInt _) = True
+isUIntTy _ = False
+
+isFloatTy :: Type -> Bool
+isFloatTy (exTyAnn -> TFp _) = True
+isFloatTy _ = False
+
+isNumType :: Type -> Bool
+isNumType ty = isIntTy ty || isUIntTy ty || isFloatTy ty
+
+isBitType :: Type -> Bool
+isBitType ty = isNumType ty || isPtrTy ty
+
+isBoolType :: Type -> Bool
+isBoolType (exTyAnn -> TInt 1) = True
+isBoolType _ = False
+
+isPtrTy :: Type -> Bool
+isPtrTy (exTyAnn -> ty) = 
+  case ty of
+    TArr _ _ -> True
+    TArray _ _ -> True
+    TPtr _ -> True
+    _ -> False
+
 
 -- Type Equality
 
@@ -242,12 +347,12 @@ instance Eq Type where
     
     (TCon n1, TCon n2) -> n1 == n2
     
-    (TBool, TBool) -> True
-    (TI8, TI8)   -> True
-    (TI32, TI32) -> True
-    (TI64, TI64) -> True
-    (TF32, TF32) -> True
-    (TF64, TF64) -> True
+    (TInt  s1, TInt  s2) -> s1 == s2
+    (TUInt s1, TUInt s2) -> s1 == s2
+    (TFp   s1, TFp   s2) -> s1 == s2
+
+    (TVect s1 t1, TVect s2 t2)
+      -> s1 == s2 && t1 == t2
 
     (TPtr t1, TPtr t2) -> t1 == t2
 
@@ -297,7 +402,7 @@ exPType _ = error "Expected typed expression!"
 exElseType :: Else -> Type
 exElseType = \case
   Else _ e -> exType e
-  Elif _ p (exType -> t) (exElseType -> f)
+  Elif _ _ (exType -> t) (exElseType -> f)
     | t == f -> t
     | otherwise -> error $ "Expected both branches of else to have same type"
 
@@ -327,6 +432,13 @@ exPAnn = \case
   p -> p
 
 
+instance HasLocation Pat where
+  locOf = \case
+    PLoc _ l -> l
+    PType p _ -> locOf p
+    _ -> error "expected pattern with location"
+
+
 -- Clauses (Case branches)
 data Clause = Clause (Maybe Loc) (Bind Pat Exp)
   deriving (Show, Generic, Typeable)
@@ -344,13 +456,32 @@ exClauseBody (Clause _ bnd)
 pvar :: String -> Pat
 pvar = PVar . s2n
 
+patVars :: Pat -> [(String, Loc)]
+patVars pat = DL.toList $ flip runReader (locOf pat) (go pat)
+  where
+    go :: Pat -> Reader Loc (DList (String, Loc))
+    go = \case
+      PVar v ->
+        ask >>= \l -> return $ pure (name2String v, l)
+      
+      PCon _ ps
+        -> mconcat <$> mapM go ps
+      PTuple p (NE.toList -> ps)
+        -> mconcat <$> mapM go (p:ps)
+
+      PWild -> return mempty
+      PType p _ -> go p
+      PLoc  p l -> withReader (const l) $ go p
+      PParens p -> go p
+
+
 patTypedVars :: Pat -> [(String, Type)]
 patTypedVars p = patTypedVars' (exPType p) p
 
 patTypedVars' :: Type -> Pat -> [(String, Type)]
 patTypedVars' ty = \case
   PVar v -> [(name2String v, ty)]
-  PCon n ps -> concatMap patTypedVars ps
+  PCon _ ps -> concatMap patTypedVars ps
   PTuple p (NE.toList -> ps) ->
     concatMap patTypedVars (p:ps)
   PWild -> []
@@ -371,6 +502,9 @@ splitType ty =
 ---------------------------------------------------------------------------
 -- Location instances
 ---------------------------------------------------------------------------
+
+instance HasLocation Module where
+  locOf (Module l _ _) = l
 
 instance HasLocation ConstrDefn where
   locOf = \case
@@ -396,8 +530,8 @@ instance HasLocation Else where
     Elif Nothing _ _ _ -> error $ "expected located elif-branch!"
 
 instance HasLocation Clause where
-  locOf (Clause (Just l) bnd) = l
-  locOf (Clause Nothing bnd)
+  locOf (Clause (Just l) _) = l
+  locOf (Clause Nothing _)
     = error $ "expected located clause!"
 
 instance HasLocation Type where
@@ -405,12 +539,6 @@ instance HasLocation Type where
     TLoc _ l -> l
     TParens t -> locOf t
     _ -> error $ "expected located type!"
-
-instance HasLocation Pat where
-  locOf = \case
-    PLoc _ l -> l
-    PParens p -> locOf p
-    _ -> error $ "expected located pattern!"
 
 
 ---------------------------------------------------------------------------

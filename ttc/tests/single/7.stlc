@@ -16,7 +16,7 @@ printArray1 xs n i =
 
 printInt : I32 -> I32
 printInt x = 
-  let txt = int2str x (String 2)
+  let txt = int2str x (Array[2])
       _ = puts txt
   in 0
 

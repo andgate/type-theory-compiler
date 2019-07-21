@@ -6,3 +6,5 @@ packages: report/
           stlc/
           systemf/
           ttc/
+jobs: 16
+keep-going: True

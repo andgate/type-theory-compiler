@@ -10,28 +10,20 @@ module Language.STLC.Desugar where
 
 import Language.Syntax.Location
 import Language.STLC.Syntax
-import Language.STLC.Pretty
 import qualified Language.LLTT.Syntax as LL
 
 import Language.STLC.Reduce
 
-import Control.Monad
 import Control.Monad.Reader
 import Data.Bifunctor
-import Data.Maybe
-import Data.List
-import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty ()
 import qualified Data.List.NonEmpty as NE
-import Data.Bitraversable
+import Data.Bitraversable ()
 
 import Unbound.Generics.LocallyNameless
-import Unbound.Generics.LocallyNameless.Name (name2String, s2n)
+import Unbound.Generics.LocallyNameless.Name (name2String)
 
 import Data.Text.Prettyprint.Doc
-import Data.Text.Prettyprint.Doc.Render.Text
-
-import System.IO.Unsafe
-import System.Exit (exitFailure)
 
 -- This pass produces a desugared STLC syntax tree.
 -- The end result of desugaring is a Low-Level Type
@@ -77,25 +69,14 @@ desugarEntry :: Entry -> LL.Entry
 desugarEntry (Entry l n ty) = LL.Entry l n (desugarType ty)
 
 desugarFunc :: MonadDesugar m => Func -> m LL.Func
-desugarFunc (Func l ty fn_n bnd) = withLoc l $ do
+desugarFunc (Func l _ fn_n bnd) = withLoc l $ do
   (ps, body) <- unbind bnd
   let ps' = desugarPat <$> ps
   body' <- desugarExp body
   return $ LL.Func l fn_n ps' body'
 
 desugarExp  :: MonadDesugar m => Exp -> m LL.Exp
-desugarExp (EType e ty) = LL.EType <$> desugarExp' ty e <*> pure (desugarType ty)
-desugarExp (ELoc e l) = withLoc l $ LL.ELoc <$> desugarExp e <*> pure l
-desugarExp e = do
-  l <- askLoc
-  return $ unsafePerformIO $ do
-    putDoc $ vsep [ line <> pretty l <+> "fatal compiler error:"
-                  , indent 4 $ vsep [ "desugarExp - Expected typed expression."
-                                    , "in"
-                                    , indent 2 $ pretty e
-                                    ]
-                  ]
-    exitFailure
+desugarExp e@(exType -> ty) = desugarExp' ty e
 
 
 desugarExp'  :: MonadDesugar m => Type -> Exp -> m LL.Exp
@@ -114,7 +95,7 @@ desugarExp' ty = \case
   ELoc e l -> withLoc l $ LL.ELoc <$> desugarExp' ty e <*> pure l
   EParens e -> LL.EParens <$> desugarExp' ty e
 
-  ELam bnd -> error "Unlifted lambda expression encountered!"
+  ELam _ -> error "Unlifted lambda expression encountered!"
 
   ELet bnd -> do
     (unrec -> letbnds, body) <- unbind bnd
@@ -130,7 +111,7 @@ desugarExp' ty = \case
   ECase e cls ->
     case exTyAnn (exType e) of
       TCon _ -> LL.EMatch <$> desugarExp e <*> mapM desugarClause cls
-      t | t `elem` intTypes -> LL.EMatchI <$> desugarExp e <*> mapM desugarClause cls
+      t | t `elem` intTypes -> LL.EMatch <$> desugarExp e <*> mapM desugarClause cls
       _ -> error "Case analysis on unsupported type!"
       -- At some point, it would be nice if case could work with any type...
 
@@ -143,54 +124,46 @@ desugarExp' ty = \case
   ETuple x xs ->
     LL.ETuple <$> desugarExp x <*> mapM desugarExp xs
 
-  ECon n xs ->
-    LL.ECon n <$> mapM desugarExp xs
+  ECon n xs -> LL.ECon n <$> mapM desugarExp xs
+  ENewCon n xs -> LL.ENewCon n <$> mapM desugarExp xs
 
-  ENewCon n xs ->
-    LL.ENewCon n <$> mapM desugarExp xs
-
-  EFree e -> 
-    LL.EFree <$> desugarExp e
-
-  
-  EGet e m ->
-    LL.EGet <$> desugarExp e <*> pure m
-
+  EFree e -> LL.EFree <$> desugarExp e
+  EGet e m -> LL.EGet <$> desugarExp e <*> pure m
   EGetI e i -> LL.EGetI <$> desugarExp e <*> desugarExp i
-
   ESet lhs rhs -> LL.ESet <$> desugarExp lhs <*> desugarExp rhs
 
   ENewArray xs -> LL.ENewArray <$> mapM desugarExp xs
-
   ENewArrayI i -> LL.ENewArrayI <$> desugarExp i
+  EResizeArray e i -> LL.EResizeArray <$> desugarExp e <*> desugarExp i
 
-  ENewStringI i -> LL.ENewStringI <$> desugarExp i
+  ENewVect es -> LL.ENewVect <$> mapM desugarExp es
+  ENewVectI i -> LL.ENewVectI <$> desugarExp i
+
+  ENewString s -> return $ LL.ENewString s
 
   EOp op -> LL.EOp <$> desugarOp op
-
-  e -> error $ "unhandled case: " ++ show e
 
 
 desugarLit :: MonadDesugar m => Lit -> m LL.Lit
 desugarLit = \case
+  LNull      -> pure $ LL.LNull
+  LBool b    -> pure $ LL.LBool b
   LInt i     -> pure $ LL.LInt i
   LDouble d  -> pure $ LL.LDouble d
   LChar c    -> pure $ LL.LChar c
-  LBool b    -> pure $ LL.LBool b
   LString s  -> pure $ LL.LString s
-  LStringI i ->
-    case reduceBy mempty 50 i of
-      EType (ELit (LInt i)) _ -> return $ LL.LStringI i
-      ELit (LInt i) -> return $ LL.LStringI i
-      _ -> error $ "desugar - expected constant integer! Found: " ++ show i
-
   LArray xs  -> LL.LArray   <$> mapM desugarExp xs
   LArrayI i  ->
     case reduceBy mempty 50 i of
-      EType (ELit (LInt i)) _ -> return $ LL.LArrayI i
-      ELit (LInt i) -> return $ LL.LArrayI i
+      (exEAnn -> ELit (LInt i')) -> return $ LL.LArrayI i'
       _ -> error $ "desugar - expected constant integer! Found: " ++ show i
-
+  LVect xs  -> LL.LVect <$> mapM desugarExp xs
+  LVectI i  ->
+    case reduceBy mempty 50 i of
+      (exEAnn -> ELit (LInt i')) -> return $ LL.LVectI i'
+      _ -> error $ "desugar - expected constant integer! Found: " ++ show i
+    
+    
 
 desugarElse :: MonadDesugar m => Else -> m LL.Else
 desugarElse = \case
@@ -205,25 +178,21 @@ desugarElse = \case
 
 desugarOp :: MonadDesugar m => Op -> m LL.Op
 desugarOp = \case
-  OpAddI a b -> LL.OpAddI <$> desugarExp a <*> desugarExp b
-  OpSubI a b -> LL.OpSubI <$> desugarExp a <*> desugarExp b
-  OpMulI a b -> LL.OpMulI <$> desugarExp a <*> desugarExp b
-  OpDivI a b -> LL.OpDivI <$> desugarExp a <*> desugarExp b
-  OpRemI a b -> LL.OpRemI <$> desugarExp a <*> desugarExp b
+  OpAdd a b -> LL.OpAdd <$> desugarExp a <*> desugarExp b
+  OpSub a b -> LL.OpSub <$> desugarExp a <*> desugarExp b
+  OpMul a b -> LL.OpMul <$> desugarExp a <*> desugarExp b
+  OpDiv a b -> LL.OpDiv <$> desugarExp a <*> desugarExp b
+  OpRem a b -> LL.OpRem <$> desugarExp a <*> desugarExp b
   OpNeg a -> LL.OpNeg <$> desugarExp a
-
-  OpAddF a b -> LL.OpAddF <$> desugarExp a <*> desugarExp b
-  OpSubF a b -> LL.OpSubF <$> desugarExp a <*> desugarExp b
-  OpMulF a b -> LL.OpMulF <$> desugarExp a <*> desugarExp b
-  OpDivF a b -> LL.OpDivF <$> desugarExp a <*> desugarExp b
-  OpRemF a b -> LL.OpRemF <$> desugarExp a <*> desugarExp b
   
   OpAnd a b -> LL.OpAnd <$> desugarExp a <*> desugarExp b
   OpOr  a b -> LL.OpOr <$> desugarExp a <*> desugarExp b
   OpXor a b -> LL.OpXor <$> desugarExp a <*> desugarExp b
+  OpShR a b -> LL.OpShR <$> desugarExp a <*> desugarExp b
+  OpShL a b -> LL.OpShL <$> desugarExp a <*> desugarExp b
 
-  OpEqI a b -> LL.OpEqI <$> desugarExp a <*> desugarExp b
-  OpNeqI a b -> LL.OpNeqI <$> desugarExp a <*> desugarExp b
+  OpEq a b -> LL.OpEq <$> desugarExp a <*> desugarExp b
+  OpNeq a b -> LL.OpNeq <$> desugarExp a <*> desugarExp b
 
   OpLT a b -> LL.OpLT <$> desugarExp a <*> desugarExp b
   OpLE a b -> LL.OpLE <$> desugarExp a <*> desugarExp b
@@ -232,19 +201,17 @@ desugarOp = \case
 
 desugarType :: Type -> LL.Type
 desugarType = \case
-  ty@(TArr a b) ->
+  ty@(TArr _ _) ->
     let (paramtys, retty) = splitType ty
     in LL.TFunc (desugarType retty) (NE.fromList $ desugarType <$> paramtys) 
 
   TCon n  -> LL.TCon n
-  TBool   -> LL.TBool
-  TI8     -> LL.TI8
-  TI32    -> LL.TI32
-  TI64    -> LL.TI64
-  TF32    -> LL.TF32
-  TF64    -> LL.TF64
+  TInt i  -> LL.TInt i
+  TUInt i -> LL.TUInt i
+  TFp i   -> LL.TFp i
   TTuple t ts -> LL.TTuple (desugarType t) (desugarType <$> ts)
   TArray i ty -> LL.TArray i (desugarType ty)
+  TVect i ty -> LL.TVect i (desugarType ty)
   TPtr ty -> LL.TPtr (desugarType ty)
   TLoc t l -> LL.TLoc (desugarType t) l
   TParens t -> LL.TParens (desugarType t)
@@ -270,11 +237,11 @@ desugarClause (Clause Nothing bnd) = do
   (p, e) <- unbind bnd
   let ns = (Just . fst) <$> patTypedVars p
   case exPAnn p of
-    PCon n args -> do
+    PCon n _ -> do
       e' <- desugarExp e
       return $ LL.Clause n ns e'
 
-    p -> do
+    _ -> do
       l <- ask
       error $ show $ vsep [ line <> pretty l <+> "error:"
                           , indent 4 $ vsep

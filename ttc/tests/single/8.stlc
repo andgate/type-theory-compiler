@@ -43,7 +43,7 @@ printNat : *Nat -> I32
 printNat n = printInt (nat2int n)
 
 printInt : I32 -> I32
-printInt x = puts (int2str x (String 11))
+printInt x = puts (int2str x (Array[11]))
 
 main : I32 -> **I8 -> I32
 main argc argv =

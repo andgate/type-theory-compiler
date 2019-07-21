@@ -54,6 +54,7 @@ let
     upkgs.llvm_8
     upkgs.clang_7
     pkgs.gdb
+    pkgs.haskellPackages.happy
   ];
 in
 pkgs.stdenv.mkDerivation {

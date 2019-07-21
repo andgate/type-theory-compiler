@@ -10,9 +10,9 @@
           #-}
 module Language.LLTT.Infer where
 
+{-
 import Language.LLTT.Syntax
 
-{-
 -- Type Inference
 --   Type inference will enrich the ast with type annotations.
 -- While this language is intended to be the target of a

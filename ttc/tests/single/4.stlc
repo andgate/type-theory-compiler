@@ -24,7 +24,7 @@ printMaybe mx =
 
 printInt : I32 -> I32
 printInt x = 
-  let txt = new [] 2 : *I8
+  let txt = new Array[2] : *I8
       txt1 = int2str x txt
       _ = puts txt1
       _ = delete txt1

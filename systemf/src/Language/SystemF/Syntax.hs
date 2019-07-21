@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# LANGUAGE LambdaCase,
              FlexibleInstances, 
              MultiParamTypeClasses, 
