@@ -71,10 +71,10 @@ instance Pretty Err where
 -- Namecheck Monad
 type MonadNamecheck m = (Fresh m, MonadReader Env m, MonadReport Err m)
 
-newtype NamecheckT a = NC { unNamecheck :: ReportT Err (FreshMT (Reader Env)) a }
+newtype Namecheck a = NC { unNamecheck :: ReportT Err (FreshMT (Reader Env)) a }
   deriving (Functor, Applicative, Monad, Fresh, MonadReader Env, MonadReport Err)
 
-runNamecheck :: NamecheckT a -> Env-> Either [Err] a
+runNamecheck :: Namecheck a -> Env-> Either [Err] a
 runNamecheck m env
   = runReader (runFreshMT (runReportT (unNamecheck m))) env
 
@@ -258,11 +258,11 @@ namecheckElse :: MonadNamecheck m => Else -> m Else
 namecheckElse = \case
   Else may_l body -> do
     l <- maybe (envLoc <$> ask) pure may_l
-    withLoc l $ Else (Just l) <$> namecheckExp body
+    withLoc l $ Else may_l <$> namecheckExp body
 
   Elif may_l p t f -> do
     l <- maybe (envLoc <$> ask) pure may_l
-    withLoc l $ Elif (Just l) <$> namecheckExp p <*> namecheckExp t <*> namecheckElse f
+    withLoc l $ Elif may_l <$> namecheckExp p <*> namecheckExp t <*> namecheckElse f
 
 
 namecheckOp :: MonadNamecheck m => Op -> m Op
