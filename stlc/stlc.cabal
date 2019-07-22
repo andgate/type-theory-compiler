@@ -54,7 +54,8 @@ library
                        report,
                        safe,
                        text,
-                       unbound-generics
+                       unbound-generics,
+                       writer-cps-mtl
 
   build-tools:
       alex ==3.2.4, happy==1.19.9

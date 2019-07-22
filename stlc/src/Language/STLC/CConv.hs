@@ -33,7 +33,7 @@ envInsertNames ns env
 -- CConv Monad
 type MonadCConv m = (Fresh m, MonadReader Env m)
 
-newtype CConv a = NC { unCConv :: FreshMT (Reader Env) a }
+newtype CConv a = CConv { unCConv :: FreshMT (Reader Env) a }
   deriving (Functor, Applicative, Monad, Fresh, MonadReader Env)
 
 runCConv :: CConv a -> a
@@ -42,17 +42,6 @@ runCConv m
 
 withNames :: MonadCConv m => [String] -> m a -> m a
 withNames ns = local (envInsertNames ns)
-
--- checkVar :: MonadCConv m => Var -> m Var
--- checkVar v = checkName (name2String v) >> return v
-
--- checkName  :: MonadCConv m => String -> m String
--- checkName n = do
---   may_n <- (Map.lookup (SName n VarName) . envNames) <$> ask
---   l <- envLoc <$> ask
---   case may_n of
---     Nothing -> nonfatal (UndefinedName l n) n
---     Just _ -> return n
 
 
 -- CConv should transform a module without any errors
